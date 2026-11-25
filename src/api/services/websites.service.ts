@@ -354,4 +354,85 @@ export const websitesService = {
     );
     return response.data;
   },
+
+  /**
+   * POST {{baseUrl}}/websites/{{websiteId}}/articles/{{articleId}}/media
+   * Uploads a licensed image file directly to WordPress Media Library and attaches it to the placeholder.
+   */
+  async uploadArticleMedia(
+    websiteId: string,
+    articleId: string,
+    file: File,
+    placeholderId?: string
+  ): Promise<{
+    id: string;
+    placeholderId: string;
+    wpMediaId: number;
+    mediaUrl: string;
+    isPreviewOnly: boolean;
+    images: any[];
+  }> {
+    const formData = new FormData();
+    formData.append('file', file);
+    if (placeholderId) {
+      formData.append('placeholderId', placeholderId);
+    }
+    const response = await apiClient.post<any>(
+      API_ENDPOINTS.WEBSITES.ARTICLE_MEDIA(websiteId, articleId),
+      formData,
+      {
+        headers: { 'Content-Type': 'multipart/form-data' },
+        timeout: 60000,
+      }
+    );
+    const resData: any = response.data;
+    return resData?.data || resData;
+  },
+
+  /**
+   * PATCH {{baseUrl}}/websites/{{websiteId}}/articles/{{articleId}}/media/select
+   */
+  async selectArticleMedia(
+    websiteId: string,
+    articleId: string,
+    placeholderId: string,
+    assetId: string
+  ): Promise<{
+    id: string;
+    placeholderId: string;
+    selectedAsset: any;
+    featuredMediaUrl?: string | null;
+    images: any[];
+  }> {
+    const response = await apiClient.patch<any>(
+      API_ENDPOINTS.WEBSITES.ARTICLE_MEDIA_SELECT(websiteId, articleId),
+      { placeholderId, assetId }
+    );
+    const resData: any = response.data;
+    return resData?.data || resData;
+  },
+
+  /**
+   * POST {{baseUrl}}/websites/{{websiteId}}/articles/{{articleId}}/media/search
+   */
+  async searchArticleMedia(
+    websiteId: string,
+    articleId: string,
+    placeholderId: string,
+    query: string
+  ): Promise<{
+    id: string;
+    placeholderId: string;
+    query: string;
+    found: number;
+    featuredMediaUrl?: string | null;
+    images: any[];
+  }> {
+    const response = await apiClient.post<any>(
+      API_ENDPOINTS.WEBSITES.ARTICLE_MEDIA_SEARCH(websiteId, articleId),
+      { placeholderId, query }
+    );
+    const resData: any = response.data;
+    return resData?.data || resData;
+  },
 };

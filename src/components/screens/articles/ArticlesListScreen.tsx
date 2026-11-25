@@ -6,8 +6,8 @@ import { articlesService } from '../../../api/services/articles.service';
 import type { ProcessedArticleDataDto } from '../../../api/types/article.dto';
 import { Button } from '../../common/Button';
 import { Badge } from '../../common/Badge';
+import { Modal } from '../../common/Modal';
 import { LiveArticleDetailModal } from './LiveArticleDetailModal';
-import { WebsiteArticleEditModal } from './WebsiteArticleEditModal';
 import {
   Plus,
   Search,
@@ -20,6 +20,7 @@ import {
   Globe,
   Trash2,
   FileText,
+  AlertTriangle,
 } from 'lucide-react';
 
 export const ArticlesListScreen: React.FC = () => {
@@ -34,7 +35,7 @@ export const ArticlesListScreen: React.FC = () => {
     goToPage,
     refreshActiveSiteArticlesCount,
   } = useArticles();
-  const { sites, activeSiteId, navigateToNewArticle, addToast } = useApp();
+  const { sites, activeSiteId, navigateToNewArticle, navigateToEditArticle, addToast } = useApp();
 
   // Active website is driven strictly by top navbar
   const activeSite = sites.find(s => s.id === activeSiteId) || sites[0];
@@ -67,11 +68,9 @@ export const ArticlesListScreen: React.FC = () => {
     lastPage: 1,
   });
 
-  // Website Article Detail / Edit Modal
-  const [selectedWebsiteArticleId, setSelectedWebsiteArticleId] = useState<string | null>(null);
-  const [isWebsiteArticleModalOpen, setIsWebsiteArticleModalOpen] = useState<boolean>(false);
   const [togglingArticleId, setTogglingArticleId] = useState<string | null>(null);
   const [deletingWebsiteArticleId, setDeletingWebsiteArticleId] = useState<string | null>(null);
+  const [articleToDelete, setArticleToDelete] = useState<{ id: string; title: string } | null>(null);
 
   // Load Website Articles: GET /websites/:websiteId/articles
   const loadWebsiteArticles = async (
@@ -257,12 +256,14 @@ export const ArticlesListScreen: React.FC = () => {
     }
   };
 
-  // Delete Website Article: DELETE /websites/:websiteId/articles/:articleId
-  const handleDeleteWebsiteArticle = async (articleId: string, articleTitle: string) => {
-    if (!activeSite?.id) return;
-    if (!window.confirm(`Are you sure you want to permanently delete "${articleTitle}"?`)) {
-      return;
-    }
+  // Delete Website Article Modal Trigger & Handler
+  const openDeleteArticleConfirm = (articleId: string, articleTitle: string) => {
+    setArticleToDelete({ id: articleId, title: articleTitle });
+  };
+
+  const handleConfirmDeleteArticle = async () => {
+    if (!activeSite?.id || !articleToDelete) return;
+    const { id: articleId, title: articleTitle } = articleToDelete;
     setDeletingWebsiteArticleId(articleId);
     try {
       await websitesService.deleteWebsiteArticle(activeSite.id, articleId);
@@ -271,6 +272,7 @@ export const ArticlesListScreen: React.FC = () => {
         message: `"${articleTitle}" was permanently deleted.`,
         type: 'info',
       });
+      setArticleToDelete(null);
       loadWebsiteArticles(websiteArticlesPagination.page);
       refreshActiveSiteArticlesCount(activeSite.id);
     } catch (err: any) {
@@ -497,19 +499,20 @@ export const ArticlesListScreen: React.FC = () => {
             </span>
           </div>
 
-          {/* Fully Responsive Table Wrapper */}
+          {/* Fully Responsive Table & Mobile Cards Container */}
           <div className="bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 rounded-2xl overflow-hidden shadow-xs">
-            <div className="overflow-x-auto">
-              <table className="w-full text-left border-collapse min-w-[700px]">
+            {/* Desktop / Tablet Table View */}
+            <div className="hidden md:block overflow-x-auto">
+              <table className="w-full text-left border-collapse min-w-[1020px]">
                 <thead>
                   <tr className="border-b border-slate-200 dark:border-zinc-800 bg-slate-50/70 dark:bg-zinc-950/70 text-[11px] font-bold tracking-wider text-slate-400 dark:text-zinc-500 uppercase">
-                    <th className="py-3 px-4">Article</th>
-                    <th className="py-3 px-4 hidden sm:table-cell">Content Type</th>
-                    <th className="py-3 px-4 hidden md:table-cell">Focus Keyword</th>
-                    <th className="py-3 px-4 text-center">Status Switch</th>
-                    <th className="py-3 px-4 text-center">Live Preview</th>
-                    <th className="py-3 px-4 hidden lg:table-cell">Created</th>
-                    <th className="py-3 px-4 text-right">Actions</th>
+                    <th className="py-3 px-4 min-w-[260px]">Article</th>
+                    <th className="py-3 px-4 w-36 whitespace-nowrap">Content Type</th>
+                    <th className="py-3 px-4 w-44 whitespace-nowrap">Focus Keyword</th>
+                    <th className="py-3 px-4 w-36 text-center whitespace-nowrap">Status Switch</th>
+                    <th className="py-3 px-4 w-32 text-center whitespace-nowrap">Live Preview</th>
+                    <th className="py-3 px-4 w-28 whitespace-nowrap">Created</th>
+                    <th className="py-3 px-4 w-44 text-right whitespace-nowrap">Actions</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100 dark:divide-zinc-800/80 text-xs text-slate-700 dark:text-zinc-300">
@@ -550,7 +553,7 @@ export const ArticlesListScreen: React.FC = () => {
                         >
                           {/* Article Column */}
                           <td className="py-3.5 px-4 font-medium">
-                            <div className="flex items-center gap-3 max-w-xs sm:max-w-sm md:max-w-md">
+                            <div className="flex items-center gap-3 max-w-xs lg:max-w-sm">
                               {art.featuredMediaUrl ? (
                                 <img
                                   src={art.featuredMediaUrl}
@@ -566,38 +569,24 @@ export const ArticlesListScreen: React.FC = () => {
                                 <span className="font-bold text-slate-900 dark:text-zinc-100 block truncate">
                                   {art.title}
                                 </span>
-                                <div className="flex items-center gap-2 flex-wrap mt-0.5">
-                                  <span className="text-[11px] font-mono text-slate-400 truncate block">
-                                    slug: {art.slug}
-                                  </span>
-                                  {/* Mobile fallback live link */}
-                                  {isPublished && liveUrl && (
-                                    <a
-                                      href={liveUrl}
-                                      target="_blank"
-                                      rel="noopener noreferrer"
-                                      className="inline-flex sm:hidden items-center gap-0.5 text-[10px] text-emerald-600 dark:text-emerald-400 font-semibold hover:underline"
-                                    >
-                                      <span>Live</span>
-                                      <ExternalLink className="w-2.5 h-2.5" />
-                                    </a>
-                                  )}
-                                </div>
+                                <span className="text-[11px] font-mono text-slate-400 truncate block mt-0.5">
+                                  slug: {art.slug}
+                                </span>
                               </div>
                             </div>
                           </td>
 
                           {/* Content Type Column */}
-                          <td className="py-3.5 px-4 hidden sm:table-cell">
-                            <Badge variant="violet" size="sm">
+                          <td className="py-3.5 px-4 whitespace-nowrap">
+                            <Badge variant="violet" size="sm" className="whitespace-nowrap shrink-0">
                               {art.contentType?.name || art.contentTypeName || art.contentTypeSlug || 'Article'}
                             </Badge>
                           </td>
 
                           {/* Focus Keyword Column */}
-                          <td className="py-3.5 px-4 font-mono text-[11px] hidden md:table-cell">
+                          <td className="py-3.5 px-4 font-mono text-[11px] whitespace-nowrap">
                             {art.focusKeyword ? (
-                              <span className="px-2 py-0.5 rounded bg-slate-100 dark:bg-zinc-800 text-slate-700 dark:text-zinc-300 border border-slate-200 dark:border-zinc-700 max-w-[140px] truncate block">
+                              <span className="inline-block px-2 py-0.5 rounded bg-slate-100 dark:bg-zinc-800 text-slate-700 dark:text-zinc-300 border border-slate-200 dark:border-zinc-700 max-w-[160px] truncate">
                                 {art.focusKeyword}
                               </span>
                             ) : (
@@ -606,8 +595,8 @@ export const ArticlesListScreen: React.FC = () => {
                           </td>
 
                           {/* User-Friendly Status Switch Column */}
-                          <td className="py-3.5 px-4 text-center">
-                            <div className="inline-flex items-center gap-2 bg-slate-50 dark:bg-zinc-950 px-2.5 py-1 rounded-full border border-slate-200 dark:border-zinc-800 shadow-2xs">
+                          <td className="py-3.5 px-4 text-center whitespace-nowrap">
+                            <div className="inline-flex items-center gap-2 bg-slate-50 dark:bg-zinc-950 px-2.5 py-1 rounded-full border border-slate-200 dark:border-zinc-800 shadow-2xs shrink-0">
                               <button
                                 type="button"
                                 onClick={() => handleToggleArticleStatus(art)}
@@ -631,7 +620,7 @@ export const ArticlesListScreen: React.FC = () => {
                               </button>
 
                               <span
-                                className={`text-[11px] font-bold ${
+                                className={`text-[11px] font-bold whitespace-nowrap ${
                                   isPublished
                                     ? 'text-emerald-600 dark:text-emerald-400'
                                     : 'text-amber-600 dark:text-amber-400'
@@ -642,19 +631,19 @@ export const ArticlesListScreen: React.FC = () => {
                             </div>
                           </td>
 
-                          {/* Live Preview Link Column (Requested) */}
-                          <td className="py-3.5 px-4 text-center">
+                          {/* Live Preview Link Column */}
+                          <td className="py-3.5 px-4 text-center whitespace-nowrap">
                             {isPublished && liveUrl ? (
                               <a
                                 href={liveUrl}
                                 target="_blank"
                                 rel="noopener noreferrer"
-                                className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 text-[11px] font-bold hover:bg-emerald-100 dark:hover:bg-emerald-900/40 transition-colors shadow-2xs"
+                                className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 text-[11px] font-bold hover:bg-emerald-100 dark:hover:bg-emerald-900/40 transition-colors shadow-2xs whitespace-nowrap shrink-0"
                                 title="Open published page in new tab"
                               >
-                                <Globe className="w-3 h-3 text-emerald-600 dark:text-emerald-400" />
+                                <Globe className="w-3 h-3 text-emerald-600 dark:text-emerald-400 shrink-0" />
                                 <span>View Live</span>
-                                <ExternalLink className="w-2.5 h-2.5 opacity-70" />
+                                <ExternalLink className="w-2.5 h-2.5 opacity-70 shrink-0" />
                               </a>
                             ) : (
                               <span className="text-[11px] font-mono text-slate-400 italic">
@@ -664,32 +653,28 @@ export const ArticlesListScreen: React.FC = () => {
                           </td>
 
                           {/* Created Date Column */}
-                          <td className="py-3.5 px-4 text-slate-500 font-mono text-[11px] hidden lg:table-cell">
+                          <td className="py-3.5 px-4 text-slate-500 font-mono text-[11px] whitespace-nowrap">
                             {art.createdAt ? new Date(art.createdAt).toLocaleDateString() : 'N/A'}
                           </td>
 
                           {/* Actions Column */}
-                          <td className="py-3.5 px-4 text-right">
-                            <div className="flex items-center justify-end gap-1.5">
-                              {/* Preview & Edit Modal Trigger */}
+                          <td className="py-3.5 px-4 text-right whitespace-nowrap">
+                            <div className="flex items-center justify-end gap-1.5 shrink-0">
                               <Button
                                 variant="secondary"
                                 size="xs"
-                                onClick={() => {
-                                  setSelectedWebsiteArticleId(art.id);
-                                  setIsWebsiteArticleModalOpen(true);
-                                }}
-                                icon={<Eye className="w-3 h-3 text-slate-600 dark:text-zinc-400" />}
+                                onClick={() => navigateToEditArticle(art.id, activeSite?.id)}
+                                icon={<Eye className="w-3 h-3 text-slate-600 dark:text-zinc-400 shrink-0" />}
+                                className="whitespace-nowrap px-3 py-1.5 font-semibold text-xs shrink-0"
                               >
                                 Preview & Edit
                               </Button>
 
-                              {/* Delete Button */}
                               <button
                                 type="button"
-                                onClick={() => handleDeleteWebsiteArticle(art.id, art.title)}
+                                onClick={() => openDeleteArticleConfirm(art.id, art.title)}
                                 disabled={deletingWebsiteArticleId === art.id}
-                                className="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/30 transition-colors cursor-pointer"
+                                className="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/30 transition-colors cursor-pointer shrink-0"
                                 title="Delete Article"
                               >
                                 {deletingWebsiteArticleId === art.id ? (
@@ -706,6 +691,142 @@ export const ArticlesListScreen: React.FC = () => {
                   )}
                 </tbody>
               </table>
+            </div>
+
+            {/* Mobile Dedicated Card List View (< md) */}
+            <div className="md:hidden divide-y divide-slate-100 dark:divide-zinc-800/80">
+              {isLoadingWebsiteArticles ? (
+                <div className="py-16 text-center text-slate-400">
+                  <RefreshCw className="w-6 h-6 animate-spin mx-auto mb-2 text-violet-600" />
+                  <p className="text-xs">Loading articles...</p>
+                </div>
+              ) : websiteArticles.length === 0 ? (
+                <div className="py-16 px-4 text-center text-slate-400">
+                  <FileText className="w-10 h-10 mx-auto mb-2 text-slate-300 dark:text-zinc-700" />
+                  <p className="font-semibold text-slate-700 dark:text-zinc-300 text-sm">No Articles Found</p>
+                  <Button
+                    variant="glow"
+                    size="xs"
+                    onClick={navigateToNewArticle}
+                    icon={<Plus className="w-3.5 h-3.5" />}
+                    className="mt-4"
+                  >
+                    Process New Article
+                  </Button>
+                </div>
+              ) : (
+                websiteArticles.map(art => {
+                  const isPublished =
+                    art.wpStatus === 'publish' || art.workflowStatus === 'PUBLISHED';
+                  const liveUrl = art.publishedUrl || art.wpUrl || art.link;
+
+                  return (
+                    <div key={art.id} className="p-4 space-y-3">
+                      {/* Top Row: Thumbnail + Title + Status Switch */}
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="flex items-start gap-3 min-w-0 flex-1">
+                          {art.featuredMediaUrl ? (
+                            <img
+                              src={art.featuredMediaUrl}
+                              alt={art.title}
+                              className="w-12 h-12 object-cover rounded-xl shrink-0 border border-slate-200 dark:border-zinc-800"
+                            />
+                          ) : (
+                            <div className="w-12 h-12 rounded-xl bg-slate-100 dark:bg-zinc-800 flex items-center justify-center shrink-0 text-slate-400">
+                              <FileText className="w-5 h-5" />
+                            </div>
+                          )}
+                          <div className="min-w-0 flex-1">
+                            <h4 className="font-bold text-xs text-slate-900 dark:text-zinc-100 line-clamp-2 leading-snug">
+                              {art.title}
+                            </h4>
+                            <span className="text-[10px] font-mono text-slate-400 truncate block mt-0.5">
+                              {art.slug}
+                            </span>
+                          </div>
+                        </div>
+
+                        {/* Status Switch Toggle */}
+                        <div className="flex items-center gap-1.5 shrink-0 bg-slate-50 dark:bg-zinc-950 px-2 py-1 rounded-full border border-slate-200 dark:border-zinc-800">
+                          <button
+                            type="button"
+                            onClick={() => handleToggleArticleStatus(art)}
+                            disabled={togglingArticleId === art.id}
+                            className={`relative inline-flex h-4 w-7 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out ${
+                              isPublished ? 'bg-emerald-600' : 'bg-slate-300 dark:bg-zinc-600'
+                            }`}
+                          >
+                            <span
+                              className={`pointer-events-none inline-block h-3 w-3 transform rounded-full bg-white shadow-xs transition duration-200 ease-in-out ${
+                                isPublished ? 'translate-x-3' : 'translate-x-0'
+                              }`}
+                            />
+                          </button>
+                          <span className={`text-[10px] font-bold ${isPublished ? 'text-emerald-600' : 'text-amber-600'}`}>
+                            {isPublished ? 'Live' : 'Draft'}
+                          </span>
+                        </div>
+                      </div>
+
+                      {/* Middle Row: Content Type & Focus Keyword */}
+                      <div className="flex items-center gap-2 flex-wrap text-[11px]">
+                        <Badge variant="violet" size="sm">
+                          {art.contentType?.name || art.contentTypeName || art.contentTypeSlug || 'Article'}
+                        </Badge>
+
+                        {art.focusKeyword && (
+                          <span className="px-2 py-0.5 rounded-md bg-slate-100 dark:bg-zinc-800 text-slate-600 dark:text-zinc-300 font-mono text-[10px] border border-slate-200 dark:border-zinc-700">
+                            KW: {art.focusKeyword}
+                          </span>
+                        )}
+
+                        <span className="text-[10px] text-slate-400 font-mono ml-auto">
+                          {art.createdAt ? new Date(art.createdAt).toLocaleDateString() : ''}
+                        </span>
+                      </div>
+
+                      {/* Bottom Row: Actions */}
+                      <div className="flex items-center justify-between gap-2 pt-2 border-t border-slate-100 dark:border-zinc-800/60">
+                        {isPublished && liveUrl ? (
+                          <a
+                            href={liveUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 text-[11px] font-semibold"
+                          >
+                            <Globe className="w-3 h-3 text-emerald-600" />
+                            <span>View Live</span>
+                            <ExternalLink className="w-2.5 h-2.5" />
+                          </a>
+                        ) : (
+                          <span />
+                        )}
+
+                        <div className="flex items-center gap-2">
+                          <Button
+                            variant="secondary"
+                            size="xs"
+                            onClick={() => navigateToEditArticle(art.id, activeSite?.id)}
+                            icon={<Eye className="w-3 h-3 text-slate-600 dark:text-zinc-400" />}
+                          >
+                            Preview & Edit
+                          </Button>
+
+                          <button
+                            type="button"
+                            onClick={() => openDeleteArticleConfirm(art.id, art.title)}
+                            disabled={deletingWebsiteArticleId === art.id}
+                            className="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/30 transition-colors"
+                            title="Delete"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })
+              )}
             </div>
 
             {/* Pagination Footer */}
@@ -818,7 +939,8 @@ export const ArticlesListScreen: React.FC = () => {
 
           {/* Table of Live WordPress Content */}
           <div className="bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 rounded-2xl overflow-hidden shadow-xs">
-            <div className="overflow-x-auto">
+            {/* Desktop Table View */}
+            <div className="hidden md:block overflow-x-auto">
               <table className="w-full text-left border-collapse min-w-[650px]">
                 <thead>
                   <tr className="border-b border-slate-200 dark:border-zinc-800 bg-slate-50/50 dark:bg-zinc-950/50 text-[11px] font-bold tracking-wider text-slate-400 dark:text-zinc-500 uppercase">
@@ -934,6 +1056,97 @@ export const ArticlesListScreen: React.FC = () => {
               </table>
             </div>
 
+            {/* Mobile Dedicated Card List View (< md) */}
+            <div className="md:hidden divide-y divide-slate-100 dark:divide-zinc-800/80">
+              {isLoadingArticles ? (
+                <div className="py-16 text-center text-slate-400">
+                  <RefreshCw className="w-6 h-6 animate-spin mx-auto mb-2 text-violet-600" />
+                  <p className="text-xs">Querying WordPress REST API...</p>
+                </div>
+              ) : filteredArticles.length === 0 ? (
+                <div className="py-16 px-4 text-center text-slate-400">
+                  <Globe className="w-8 h-8 mx-auto mb-2 text-slate-300 dark:text-zinc-700" />
+                  <p className="font-semibold text-slate-700 dark:text-zinc-300">No WordPress Records Found</p>
+                </div>
+              ) : (
+                filteredArticles.map(art => (
+                  <div key={art.id} className="p-4 space-y-3">
+                    <div className="flex items-start gap-3">
+                      {art.featuredImage ? (
+                        <img
+                          src={art.featuredImage}
+                          alt={art.title}
+                          className="w-12 h-12 object-cover rounded-xl shrink-0 border border-slate-200 dark:border-zinc-800"
+                        />
+                      ) : (
+                        <div className="w-12 h-12 rounded-xl bg-slate-100 dark:bg-zinc-800 flex items-center justify-center shrink-0 text-slate-400">
+                          <ImageIcon className="w-5 h-5" />
+                        </div>
+                      )}
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-start justify-between gap-2">
+                          <h4 className="font-bold text-xs text-slate-900 dark:text-zinc-100 line-clamp-2 leading-snug">
+                            {art.title}
+                          </h4>
+                          <Badge
+                            variant={art.status === 'Published' ? 'success' : 'default'}
+                            size="sm"
+                          >
+                            {art.status}
+                          </Badge>
+                        </div>
+                        <div className="flex items-center gap-2 mt-1">
+                          <Badge variant="violet" size="sm">
+                            {art.postType}
+                          </Badge>
+                          <span className="text-[10px] font-mono text-slate-400">#{art.wpPostId || art.id}</span>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center justify-between gap-2 pt-2 border-t border-slate-100 dark:border-zinc-800/60">
+                      {art.liveUrl ? (
+                        <a
+                          href={art.liveUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="inline-flex items-center gap-1 text-[11px] text-violet-600 dark:text-violet-400 font-semibold"
+                        >
+                          <Globe className="w-3 h-3" />
+                          <span>View Live</span>
+                          <ExternalLink className="w-2.5 h-2.5" />
+                        </a>
+                      ) : (
+                        <span />
+                      )}
+
+                      <div className="flex items-center gap-2">
+                        <Button
+                          variant="secondary"
+                          size="xs"
+                          onClick={() => handleViewLiveDetail(art)}
+                          icon={<Eye className="w-3 h-3 text-slate-600 dark:text-zinc-400" />}
+                        >
+                          Inspect
+                        </Button>
+
+                        <Button
+                          variant="glow"
+                          size="xs"
+                          onClick={() => handleIngest(art)}
+                          isLoading={ingestingId === (art.wpPostId || art.id)}
+                          disabled={(art as any).hasSnapshot}
+                          icon={<Plus className="w-3 h-3" />}
+                        >
+                          {(art as any).hasSnapshot ? 'Ingested' : 'Ingest'}
+                        </Button>
+                      </div>
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+
             {/* Pagination Controls */}
             <div className="p-3.5 px-4 border-t border-slate-200 dark:border-zinc-800 flex flex-col sm:flex-row items-center justify-between gap-3 bg-slate-50/80 dark:bg-zinc-950/80">
               <div className="text-xs text-slate-500 font-mono">
@@ -967,21 +1180,6 @@ export const ArticlesListScreen: React.FC = () => {
         </div>
       )}
 
-      {/* Website Article Edit & Preview Modal */}
-      <WebsiteArticleEditModal
-        isOpen={isWebsiteArticleModalOpen}
-        onClose={() => {
-          setIsWebsiteArticleModalOpen(false);
-          setSelectedWebsiteArticleId(null);
-        }}
-        websiteId={activeSite?.id || ''}
-        articleId={selectedWebsiteArticleId}
-        onArticleUpdated={() => {
-          loadWebsiteArticles(websiteArticlesPagination.page);
-          if (activeSite?.id) refreshActiveSiteArticlesCount(activeSite.id);
-        }}
-      />
-
       {/* Live Record Detail Modal */}
       <LiveArticleDetailModal
         isOpen={isLiveModalOpen}
@@ -991,6 +1189,53 @@ export const ArticlesListScreen: React.FC = () => {
         onIngest={selectedRecord ? () => handleIngest(selectedRecord) : undefined}
         isIngesting={ingestingId === selectedRecord?.id}
       />
+
+      {/* Delete Article Confirmation Modal */}
+      <Modal
+        isOpen={!!articleToDelete}
+        onClose={() => setArticleToDelete(null)}
+        title="Delete Article"
+        maxWidth="md"
+      >
+        <div className="space-y-4">
+          <div className="flex items-start gap-3">
+            <div className="w-10 h-10 rounded-xl bg-rose-50 dark:bg-rose-950/50 border border-rose-200 dark:border-rose-900/50 flex items-center justify-center shrink-0 text-rose-600 dark:text-rose-400">
+              <AlertTriangle className="w-5 h-5" />
+            </div>
+            <div className="space-y-1">
+              <p className="text-xs text-slate-600 dark:text-zinc-300">
+                Are you sure you want to permanently delete this article?
+              </p>
+              <p className="text-xs font-semibold text-slate-900 dark:text-zinc-100 break-words">
+                &ldquo;{articleToDelete?.title}&rdquo;
+              </p>
+              <p className="text-[11px] text-slate-400">
+                This action cannot be undone. Any associated published WordPress data will be removed.
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-center justify-end gap-2.5 pt-3 border-t border-slate-100 dark:border-zinc-800">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setArticleToDelete(null)}
+              disabled={!!deletingWebsiteArticleId}
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              size="sm"
+              onClick={handleConfirmDeleteArticle}
+              isLoading={!!deletingWebsiteArticleId}
+              icon={<Trash2 className="w-3.5 h-3.5" />}
+            >
+              Delete Article
+            </Button>
+          </div>
+        </div>
+      </Modal>
     </div>
   );
 };

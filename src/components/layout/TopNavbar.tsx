@@ -11,7 +11,6 @@ import {
   LogOut,
   Menu,
 } from 'lucide-react';
-import { Button } from '../common/Button';
 
 export const TopNavbar: React.FC = () => {
   const {
@@ -19,7 +18,6 @@ export const TopNavbar: React.FC = () => {
     activeSiteId,
     setActiveSiteId,
     setIsAddWebsiteModalOpen,
-    navigateToNewArticle,
     currentUser,
     logout,
     addToast,
@@ -88,28 +86,8 @@ export const TopNavbar: React.FC = () => {
         )}
       </div>
 
-      {/* Right: Quick actions, Theme switcher, Notifications, User info & Logout */}
+      {/* Right: Theme switcher, Notifications, User info & Logout */}
       <div className="flex items-center gap-2 sm:gap-2.5 shrink-0">
-        <Button
-          variant="secondary"
-          size="sm"
-          onClick={() => setIsAddWebsiteModalOpen(true)}
-          icon={<Plus className="w-3.5 h-3.5" />}
-          className="hidden md:inline-flex"
-        >
-          Connect Website
-        </Button>
-
-        <Button
-          variant="glow"
-          size="sm"
-          onClick={navigateToNewArticle}
-          icon={<Plus className="w-3.5 h-3.5" />}
-          className="hidden sm:inline-flex"
-        >
-          Add New Article
-        </Button>
-
         {/* Theme Toggle Button (Light / Dark) */}
         <button
           onClick={toggleTheme}
@@ -154,10 +132,10 @@ export const TopNavbar: React.FC = () => {
             <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-violet-600 to-indigo-600 flex items-center justify-center font-bold text-xs text-white shadow-xs shrink-0">
               {currentUser?.fullName
                 ? currentUser.fullName
-                    .split(' ')
-                    .map(n => n[0])
-                    .join('')
-                    .toUpperCase()
+                  .split(' ')
+                  .map(n => n[0])
+                  .join('')
+                  .toUpperCase()
                 : 'U'}
             </div>
           )}

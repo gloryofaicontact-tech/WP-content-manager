@@ -12,7 +12,7 @@ import type {
   WebsiteFilterParams,
 } from '../api/types/website.dto';
 
-export type ScreenId = 'dashboard' | 'websites' | 'website-detail' | 'articles' | 'article-new' | 'settings';
+export type ScreenId = 'dashboard' | 'websites' | 'website-detail' | 'articles' | 'article-new' | 'article-edit' | 'settings';
 
 export interface ToastItem {
   id: string;
@@ -66,6 +66,7 @@ interface AppContextType {
   setSelectedArticleIdForEdit: (id: string | null) => void;
   navigateToWebsiteDetail: (siteId: string) => void;
   navigateToNewArticle: () => void;
+  navigateToEditArticle: (articleId: string, websiteId?: string) => void;
 
   // Layout & Sidebar
   isSidebarCollapsed: boolean;
@@ -408,6 +409,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setCurrentScreen('article-new');
   };
 
+  const navigateToEditArticle = (articleId: string, websiteId?: string) => {
+    if (websiteId) {
+      setActiveSiteId(websiteId);
+    }
+    setSelectedArticleIdForEdit(articleId);
+    setCurrentScreen('article-edit');
+  };
+
   const addWebsite = async (data: CreateWebsiteDto): Promise<boolean> => {
     try {
       const created = await websitesService.createWebsite(data);
@@ -648,6 +657,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         removeToast,
         navigateToWebsiteDetail,
         navigateToNewArticle,
+        navigateToEditArticle,
         isSidebarCollapsed,
         setIsSidebarCollapsed,
         toggleSidebarCollapse,

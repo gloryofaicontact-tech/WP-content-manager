@@ -4,6 +4,8 @@ import { Badge } from '../../common/Badge';
 import { Button } from '../../common/Button';
 import { websitesService } from '../../../api/services/websites.service';
 import type { ProcessedArticleDataDto } from '../../../api/types/article.dto';
+import { ArticleImagesPanel } from './ArticleImagesPanel';
+import { PreviewGuardModal, type PreviewPlaceholderWarning } from './PreviewGuardModal';
 import { useApp } from '../../../context/AppContext';
 import { useArticles } from '../../../context/ArticleContext';
 import {
@@ -46,6 +48,8 @@ export const WebsiteArticleEditModal: React.FC<WebsiteArticleEditModalProps> = (
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [isSaving, setIsSaving] = useState<boolean>(false);
   const [isTogglingStatus, setIsTogglingStatus] = useState<boolean>(false);
+  const [previewGuardOpen, setPreviewGuardOpen] = useState<boolean>(false);
+  const [previewWarnings, setPreviewWarnings] = useState<PreviewPlaceholderWarning[]>([]);
   const [isDeleting, setIsDeleting] = useState<boolean>(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState<boolean>(false);
   const [copiedHtml, setCopiedHtml] = useState<boolean>(false);
@@ -125,7 +129,7 @@ export const WebsiteArticleEditModal: React.FC<WebsiteArticleEditModalProps> = (
 
   // POST /websites/:websiteId/articles/:articleId/publish
   // User-friendly switch toggle between "publish" and "draft"
-  const handleToggleStatusSwitch = async () => {
+  const handleToggleStatusSwitch = async (allowPreviewImages = false) => {
     if (!websiteId || !articleId || !article) return;
     const currentIsPublished = article.wpStatus === 'publish' || article.workflowStatus === 'PUBLISHED';
     const nextStatus = currentIsPublished ? 'draft' : 'publish';
@@ -134,8 +138,10 @@ export const WebsiteArticleEditModal: React.FC<WebsiteArticleEditModalProps> = (
     try {
       await websitesService.publishWebsiteArticle(websiteId, articleId, {
         status: nextStatus,
+        ...(allowPreviewImages ? { allowPreviewImages: true } : {}),
       });
 
+      setPreviewGuardOpen(false);
       addToast({
         title: nextStatus === 'publish' ? 'Article Published Live!' : 'Reverted to Draft',
         message:
@@ -150,10 +156,20 @@ export const WebsiteArticleEditModal: React.FC<WebsiteArticleEditModalProps> = (
       onArticleUpdated?.();
       refreshActiveSiteArticlesCount(websiteId);
     } catch (err: any) {
+      const errData = err.response?.data;
+      if (
+        nextStatus === 'publish' &&
+        (Array.isArray(errData?.previewPlaceholders) ||
+          String(errData?.message || err.message || '').toLowerCase().includes('preview'))
+      ) {
+        setPreviewWarnings(errData?.previewPlaceholders || []);
+        setPreviewGuardOpen(true);
+        return;
+      }
       console.error('Failed to toggle status', err);
       addToast({
         title: 'Status Switch Failed',
-        message: err.response?.data?.message || err.message || 'Could not switch article status.',
+        message: errData?.message || err.message || 'Could not switch article status.',
         type: 'error',
       });
     } finally {
@@ -263,7 +279,7 @@ export const WebsiteArticleEditModal: React.FC<WebsiteArticleEditModalProps> = (
 
                 <button
                   type="button"
-                  onClick={handleToggleStatusSwitch}
+                  onClick={() => handleToggleStatusSwitch(false)}
                   disabled={isTogglingStatus}
                   role="switch"
                   aria-checked={isPublished}
@@ -599,81 +615,29 @@ export const WebsiteArticleEditModal: React.FC<WebsiteArticleEditModalProps> = (
 
           {/* ===================== TAB 3: STOCK IMAGES (ENVATO) ===================== */}
           {activeTab === 'images' && (
-            <div className="space-y-4 max-h-[65vh] overflow-y-auto pr-1">
-              {article.images && article.images.length > 0 ? (
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
-                  {article.images.map((imgItem, idx) => {
-                    const asset = imgItem.selectedAsset;
-                    return (
-                      <div
-                        key={idx}
-                        className="rounded-2xl border border-slate-200 dark:border-zinc-800 overflow-hidden bg-slate-50 dark:bg-zinc-900/60 p-3.5 space-y-2.5"
-                      >
-                        <div className="flex items-center justify-between text-xs">
-                          <span className="font-bold text-violet-600 dark:text-violet-400 font-mono">
-                            Placeholder #{idx + 1}: {imgItem.position || imgItem.placeholderId || 'Hero'}
-                          </span>
-                          <span className="text-[10px] px-2 py-0.5 rounded-md bg-slate-200 dark:bg-zinc-800 font-mono text-slate-600 dark:text-zinc-400 truncate max-w-[150px]">
-                            "{imgItem.recommendedSearch}"
-                          </span>
-                        </div>
-
-                        {asset?.previewUrl ? (
-                          <div className="rounded-xl overflow-hidden border border-slate-200 dark:border-zinc-800 bg-black aspect-video relative group">
-                            <img
-                              src={asset.previewUrl}
-                              alt={asset.title || imgItem.altText || 'Stock image'}
-                              className="w-full h-full object-cover group-hover:scale-105 transition-transform"
-                            />
-                            {asset.sourceUrl && (
-                              <a
-                                href={asset.sourceUrl}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="absolute right-2 bottom-2 px-2 py-1 rounded-lg bg-black/70 backdrop-blur-xs text-[10px] text-white flex items-center gap-1 font-semibold hover:bg-black"
-                              >
-                                <span>Envato</span>
-                                <ExternalLink className="w-2.5 h-2.5" />
-                              </a>
-                            )}
-                          </div>
-                        ) : (
-                          <div className="h-28 rounded-xl bg-slate-100 dark:bg-zinc-800 flex items-center justify-center text-slate-400 text-xs">
-                            No image preview
-                          </div>
-                        )}
-
-                        <div className="space-y-0.5 text-xs">
-                          <p className="font-bold text-slate-800 dark:text-zinc-200 truncate">
-                            {asset?.title || imgItem.altText || 'Layout Asset'}
-                          </p>
-                          {imgItem.altText && (
-                            <p className="text-[11px] text-slate-500 dark:text-zinc-400 truncate">
-                              Alt: {imgItem.altText}
-                            </p>
-                          )}
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              ) : article.featuredMediaUrl ? (
-                <div className="p-6 rounded-2xl border border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 text-center space-y-3">
-                  <img
-                    src={article.featuredMediaUrl}
-                    alt={article.title}
-                    className="max-h-64 mx-auto rounded-xl object-cover border border-slate-200 dark:border-zinc-800"
-                  />
-                  <p className="text-xs font-semibold text-slate-700 dark:text-zinc-300">
-                    Hero Media URL: <span className="font-mono text-violet-600">{article.featuredMediaUrl}</span>
-                  </p>
-                </div>
-              ) : (
-                <div className="py-16 text-center text-slate-400 space-y-2">
-                  <ImageIcon className="w-8 h-8 mx-auto text-slate-300 dark:text-zinc-700" />
-                  <p className="text-xs font-semibold">No media assets configured for this article.</p>
-                </div>
-              )}
+            <div className="max-h-[65vh] overflow-y-auto pr-1">
+              <ArticleImagesPanel
+                websiteId={websiteId}
+                articleId={article.id}
+                images={article.images}
+                featuredMediaUrl={article.featuredMediaUrl}
+                articleTitle={article.title}
+                onUpdated={async ({ images, featuredMediaUrl, reloadDetail }) => {
+                  setArticle(prev =>
+                    prev
+                      ? {
+                          ...prev,
+                          images,
+                          ...(featuredMediaUrl !== undefined ? { featuredMediaUrl } : {}),
+                        }
+                      : prev
+                  );
+                  if (reloadDetail) {
+                    await loadArticleDetail();
+                    onArticleUpdated?.();
+                  }
+                }}
+              />
             </div>
           )}
 
@@ -733,7 +697,7 @@ export const WebsiteArticleEditModal: React.FC<WebsiteArticleEditModalProps> = (
               <Button
                 variant={isPublished ? 'outline' : 'glow'}
                 size="sm"
-                onClick={handleToggleStatusSwitch}
+                onClick={() => handleToggleStatusSwitch(false)}
                 isLoading={isTogglingStatus}
                 className="flex-1 sm:flex-none"
               >
@@ -743,6 +707,15 @@ export const WebsiteArticleEditModal: React.FC<WebsiteArticleEditModalProps> = (
           </div>
         </div>
       ) : null}
+
+      <PreviewGuardModal
+        isOpen={previewGuardOpen}
+        onClose={() => setPreviewGuardOpen(false)}
+        placeholders={previewWarnings}
+        isPublishing={isTogglingStatus}
+        onGoToImages={() => setActiveTab('images')}
+        onPublishAnyway={() => handleToggleStatusSwitch(true)}
+      />
     </Modal>
   );
 };

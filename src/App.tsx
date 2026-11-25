@@ -15,6 +15,7 @@ import { WebsitesListScreen } from './components/screens/websites/WebsitesListSc
 import { WebsiteDetailScreen } from './components/screens/websites/WebsiteDetailScreen';
 import { ArticlesListScreen } from './components/screens/articles/ArticlesListScreen';
 import { ArticleEditorScreen } from './components/screens/articles/ArticleEditorScreen';
+import { ArticleEditScreen } from './components/screens/articles/ArticleEditScreen';
 import { SettingsScreen } from './components/screens/settings/SettingsScreen';
 import { AddWebsiteModal } from './components/screens/websites/AddWebsiteModal';
 
@@ -32,6 +33,8 @@ const ScreenRouter: React.FC = () => {
       return <ArticlesListScreen />;
     case 'article-new':
       return <ArticleEditorScreen />;
+    case 'article-edit':
+      return <ArticleEditScreen />;
     case 'settings':
       return <SettingsScreen />;
     default:

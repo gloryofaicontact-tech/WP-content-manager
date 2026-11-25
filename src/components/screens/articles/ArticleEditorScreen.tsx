@@ -2,7 +2,9 @@ import React, { useState, useEffect } from 'react';
 import { useApp } from '../../../context/AppContext';
 import { useArticles } from '../../../context/ArticleContext';
 import { websitesService } from '../../../api/services/websites.service';
-import type { ProcessedArticleDataDto, ImageAssetDto } from '../../../api/types/article.dto';
+import type { ProcessedArticleDataDto } from '../../../api/types/article.dto';
+import { ArticleImagesPanel } from './ArticleImagesPanel';
+import { PreviewGuardModal, type PreviewPlaceholderWarning } from './PreviewGuardModal';
 import { Button } from '../../common/Button';
 import { Badge } from '../../common/Badge';
 import {
@@ -14,7 +16,6 @@ import {
   Tag,
   CheckCircle2,
   Copy,
-  ExternalLink,
   Code2,
   Eye,
   Image as ImageIcon,
@@ -211,6 +212,8 @@ export const ArticleEditorScreen: React.FC = () => {
   // State for in-editor PATCH and Publish
   const [isPatching, setIsPatching] = useState<boolean>(false);
   const [isPublishingArticle, setIsPublishingArticle] = useState<boolean>(false);
+  const [previewGuardOpen, setPreviewGuardOpen] = useState<boolean>(false);
+  const [previewWarnings, setPreviewWarnings] = useState<PreviewPlaceholderWarning[]>([]);
   const [isEditMode, setIsEditMode] = useState<boolean>(false);
   const [editTitle, setEditTitle] = useState<string>('');
   const [editFocusKeyword, setEditFocusKeyword] = useState<string>('');
@@ -246,7 +249,7 @@ export const ArticleEditorScreen: React.FC = () => {
 
   // POST {{baseUrl}}/websites/:websiteId/articles/:articleId/publish
   // Switch between "publish" and "draft"
-  const handleTogglePublishStatus = async () => {
+  const handleTogglePublishStatus = async (allowPreviewImages = false) => {
     if (!targetSite?.id || !processedResult?.id) return;
     const isCurrentlyPublished = processedResult.wpStatus === 'publish';
     const nextStatus = isCurrentlyPublished ? 'draft' : 'publish';
@@ -255,7 +258,9 @@ export const ArticleEditorScreen: React.FC = () => {
     try {
       await websitesService.publishWebsiteArticle(targetSite.id, processedResult.id, {
         status: nextStatus,
+        ...(allowPreviewImages ? { allowPreviewImages: true } : {}),
       });
+      setPreviewGuardOpen(false);
       setProcessedResult(prev => (prev ? { ...prev, wpStatus: nextStatus } : null));
       refreshActiveSiteArticlesCount(targetSite.id);
       addToast({
@@ -267,43 +272,24 @@ export const ArticleEditorScreen: React.FC = () => {
         type: 'success',
       });
     } catch (err: any) {
+      const errData = err.response?.data;
+      if (
+        nextStatus === 'publish' &&
+        (Array.isArray(errData?.previewPlaceholders) ||
+          String(errData?.message || err.message || '').toLowerCase().includes('preview'))
+      ) {
+        setPreviewWarnings(errData?.previewPlaceholders || []);
+        setPreviewGuardOpen(true);
+        return;
+      }
       addToast({
         title: 'Status Update Failed',
-        message: err.message || 'Failed to update article status.',
+        message: errData?.message || err.message || 'Failed to update article status.',
         type: 'error',
       });
     } finally {
       setIsPublishingArticle(false);
     }
-  };
-
-  // Switch selected asset with an alternative option
-  const handleSelectAlternativeImage = (placeholderId: string | undefined, newAsset: ImageAssetDto) => {
-    if (!processedResult || !placeholderId) return;
-
-    const updatedImages = (processedResult.images || []).map(img => {
-      if (img.placeholderId === placeholderId) {
-        // Swap selected asset
-        return {
-          ...img,
-          selectedAsset: newAsset,
-        };
-      }
-      return img;
-    });
-
-    setProcessedResult({
-      ...processedResult,
-      images: updatedImages,
-      // If hero was replaced, update featuredMediaUrl
-      featuredMediaUrl: placeholderId === 'hero_featured' ? newAsset.previewUrl : processedResult.featuredMediaUrl,
-    });
-
-    addToast({
-      title: 'Image Updated',
-      message: `Selected "${newAsset.title || 'Alternative Asset'}" for ${placeholderId}.`,
-      type: 'info',
-    });
   };
 
   return (
@@ -518,7 +504,7 @@ export const ArticleEditorScreen: React.FC = () => {
               <Button
                 variant={processedResult.wpStatus === 'publish' ? 'outline' : 'glow'}
                 size="sm"
-                onClick={handleTogglePublishStatus}
+                onClick={() => handleTogglePublishStatus(false)}
                 isLoading={isPublishingArticle}
                 icon={
                   processedResult.wpStatus === 'publish' ? (
@@ -761,121 +747,36 @@ export const ArticleEditorScreen: React.FC = () => {
               )}
 
               {/* Tab 2: Stock Images & Assets */}
-              {activeTab === 'images' && (
-                <div className="space-y-6">
-                  {processedResult.images && processedResult.images.length > 0 ? (
-                    processedResult.images.map((imgGroup, idx) => (
-                      <div
-                        key={idx}
-                        className="p-5 rounded-2xl bg-slate-50/80 dark:bg-zinc-950/80 border border-slate-200 dark:border-zinc-800 space-y-4"
-                      >
-                        <div className="flex items-center justify-between">
-                          <div className="flex items-center gap-2">
-                            <Badge variant="violet" size="sm">
-                              {imgGroup.position || `Image ${idx + 1}`}
-                            </Badge>
-                            <span className="text-xs font-bold text-slate-800 dark:text-zinc-200">
-                              Heading: {imgGroup.targetHeading || 'Article Section'}
-                            </span>
-                          </div>
-                          <span className="text-[11px] font-mono text-slate-400">
-                            Search: &ldquo;{imgGroup.recommendedSearch}&rdquo;
-                          </span>
-                        </div>
-
-                        {/* Selected Hero Asset */}
-                        {imgGroup.selectedAsset && (
-                          <div className="flex flex-col sm:flex-row gap-4 p-3 rounded-xl bg-white dark:bg-zinc-900 border border-violet-200 dark:border-violet-900/60 shadow-xs">
-                            <img
-                              src={imgGroup.selectedAsset.previewUrl}
-                              alt={imgGroup.selectedAsset.title}
-                              className="w-full sm:w-48 h-32 object-cover rounded-lg shrink-0"
-                            />
-                            <div className="flex flex-col justify-between py-1 min-w-0 flex-1">
-                              <div>
-                                <div className="flex items-center gap-2 mb-1">
-                                  <span className="px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300">
-                                    Active Selection
-                                  </span>
-                                  {imgGroup.selectedAsset.provider && (
-                                    <span className="px-2 py-0.5 rounded text-[10px] font-mono uppercase bg-slate-100 dark:bg-zinc-800 text-slate-600 dark:text-zinc-400">
-                                      {imgGroup.selectedAsset.provider}
-                                    </span>
-                                  )}
-                                </div>
-                                <h4 className="text-xs font-bold text-slate-900 dark:text-zinc-100 line-clamp-1">
-                                  {imgGroup.selectedAsset.title}
-                                </h4>
-                                <p className="text-[11px] text-slate-500 mt-0.5">
-                                  Alt text: {imgGroup.altText || imgGroup.selectedAsset.title}
-                                </p>
-                              </div>
-
-                              <div className="flex items-center gap-3 text-[11px] text-slate-400 font-mono mt-2">
-                                <span>Author: {imgGroup.selectedAsset.author || 'Envato Author'}</span>
-                                {imgGroup.selectedAsset.sourceUrl && (
-                                  <a
-                                    href={imgGroup.selectedAsset.sourceUrl}
-                                    target="_blank"
-                                    rel="noreferrer"
-                                    className="text-violet-600 hover:underline flex items-center gap-0.5"
-                                  >
-                                    View Source <ExternalLink className="w-2.5 h-2.5" />
-                                  </a>
-                                )}
-                              </div>
-                            </div>
-                          </div>
-                        )}
-
-                        {/* Alternative Options Grid */}
-                        {imgGroup.alternativeOptions && imgGroup.alternativeOptions.length > 0 && (
-                          <div className="space-y-2 pt-2">
-                            <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block">
-                              Alternative Stock Options (Click to Swap)
-                            </span>
-                            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                              {imgGroup.alternativeOptions.map((alt, altIdx) => (
-                                <div
-                                  key={altIdx}
-                                  onClick={() => handleSelectAlternativeImage(imgGroup.placeholderId, alt)}
-                                  className="group p-2 rounded-xl bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 hover:border-violet-500 cursor-pointer transition-all shadow-2xs"
-                                >
-                                  <img
-                                    src={alt.previewUrl}
-                                    alt={alt.title}
-                                    className="w-full h-24 object-cover rounded-lg mb-2 group-hover:opacity-90"
-                                  />
-                                  <p className="text-[11px] font-semibold text-slate-800 dark:text-zinc-200 line-clamp-1">
-                                    {alt.title}
-                                  </p>
-                                  <span className="text-[10px] text-violet-600 dark:text-violet-400 font-medium mt-1 block group-hover:underline">
-                                    Select Image &rarr;
-                                  </span>
-                                </div>
-                              ))}
-                            </div>
-                          </div>
-                        )}
-                      </div>
-                    ))
-                  ) : processedResult.featuredMediaUrl ? (
-                    <div className="max-w-md mx-auto rounded-2xl overflow-hidden border border-slate-200 dark:border-zinc-800">
-                      <img
-                        src={processedResult.featuredMediaUrl}
-                        alt={processedResult.title}
-                        className="w-full h-64 object-cover"
-                      />
-                      <div className="p-3 bg-slate-50 dark:bg-zinc-950 text-xs font-mono text-slate-500">
-                        Featured Hero Image URL: {processedResult.featuredMediaUrl}
-                      </div>
-                    </div>
-                  ) : (
-                    <div className="py-12 text-center text-slate-400 text-xs">
-                      No stock photo assets attached to this article.
-                    </div>
-                  )}
-                </div>
+              {activeTab === 'images' && targetSite?.id && (
+                <ArticleImagesPanel
+                  websiteId={targetSite.id}
+                  articleId={processedResult.id}
+                  images={processedResult.images}
+                  featuredMediaUrl={processedResult.featuredMediaUrl}
+                  articleTitle={processedResult.title}
+                  onUpdated={async ({ images, featuredMediaUrl, reloadDetail }) => {
+                    setProcessedResult(prev =>
+                      prev
+                        ? {
+                            ...prev,
+                            images,
+                            ...(featuredMediaUrl !== undefined ? { featuredMediaUrl } : {}),
+                          }
+                        : prev
+                    );
+                    if (reloadDetail && targetSite?.id) {
+                      try {
+                        const fresh = await websitesService.getWebsiteArticleDetail(
+                          targetSite.id,
+                          processedResult.id
+                        );
+                        setProcessedResult(prev => (prev ? { ...prev, ...fresh } : fresh));
+                      } catch {
+                        // Ignore silent refresh failure
+                      }
+                    }
+                  }}
+                />
               )}
 
               {/* Tab 3: HTML Code */}
@@ -925,6 +826,15 @@ export const ArticleEditorScreen: React.FC = () => {
           </div>
         </div>
       )}
+
+      <PreviewGuardModal
+        isOpen={previewGuardOpen}
+        onClose={() => setPreviewGuardOpen(false)}
+        placeholders={previewWarnings}
+        isPublishing={isPublishingArticle}
+        onGoToImages={() => setActiveTab('images')}
+        onPublishAnyway={() => handleTogglePublishStatus(true)}
+      />
     </div>
   );
 };

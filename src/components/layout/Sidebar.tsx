@@ -124,7 +124,7 @@ export const Sidebar: React.FC = () => {
           const isActive =
             currentScreen === item.id ||
             (item.id === 'websites' && currentScreen === 'website-detail') ||
-            (item.id === 'articles' && currentScreen === 'article-new');
+            (item.id === 'articles' && (currentScreen === 'article-new' || currentScreen === 'article-edit'));
 
           return (
             <div key={item.id} className="relative group">

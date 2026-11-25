@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useApp } from '../../../context/AppContext';
 import { Button } from '../../common/Button';
 import { Badge } from '../../common/Badge';
+import { Modal } from '../../common/Modal';
 import { websitesService } from '../../../api/services/websites.service';
 import type { ContentTypeDetailDto } from '../../../api/types/website.dto';
 import type { WordPressSite } from '../../../types/wordpress';
@@ -10,12 +11,12 @@ import {
   Plus,
   RefreshCw,
   ExternalLink,
-  Shield,
   Layers,
   ArrowRight,
   Trash2,
   Globe,
   Eye,
+  AlertTriangle,
 } from 'lucide-react';
 
 interface WebsiteCardProps {
@@ -23,7 +24,7 @@ interface WebsiteCardProps {
   onTest: (id: string) => Promise<void>;
   onScan: (id: string) => Promise<void>;
   onDetails: (id: string) => void;
-  onDelete: (id: string, name: string) => Promise<void>;
+  onDelete: (id: string, name: string) => void;
   onOpenSchema: (siteId: string, slug: string) => void;
   isTesting: boolean;
   isScanning: boolean;
@@ -97,57 +98,69 @@ const WebsiteCard: React.FC<WebsiteCardProps> = ({
   };
 
   return (
-    <div className="p-5 rounded-2xl bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 shadow-xs flex flex-col justify-between space-y-4 hover:border-slate-300 dark:hover:border-zinc-700 transition-all">
-      {/* Top row */}
-      <div>
-        <div className="flex items-start justify-between gap-2">
-          <div className="min-w-0">
-            <h3 className="text-sm font-bold text-slate-900 dark:text-zinc-100 truncate">
-              {site.name}
-            </h3>
-            <a
-              href={site.url}
-              target="_blank"
-              rel="noreferrer"
-              className="text-xs text-slate-500 hover:text-slate-800 dark:text-zinc-400 dark:hover:text-zinc-200 font-mono flex items-center gap-1 mt-0.5 truncate"
-            >
-              {site.url} <ExternalLink className="w-3 h-3 shrink-0" />
-            </a>
+    <div className="p-5 sm:p-6 rounded-2xl bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 shadow-xs hover:border-violet-300 dark:hover:border-violet-900/60 hover:shadow-md transition-all flex flex-col justify-between space-y-4 group">
+      {/* Top Header */}
+      <div className="space-y-3">
+        <div className="flex items-start justify-between gap-3">
+          <div className="flex items-center gap-3 min-w-0">
+            <div className="w-10 h-10 rounded-xl bg-violet-50 dark:bg-violet-950/40 text-violet-600 dark:text-violet-400 flex items-center justify-center shrink-0 border border-violet-100 dark:border-violet-800/40 shadow-2xs group-hover:scale-105 transition-transform">
+              <Globe className="w-5 h-5" />
+            </div>
+            <div className="min-w-0">
+              <h3 className="text-sm font-bold text-slate-900 dark:text-zinc-100 truncate group-hover:text-violet-600 transition-colors">
+                {site.name}
+              </h3>
+              <a
+                href={site.url}
+                target="_blank"
+                rel="noreferrer"
+                className="text-xs text-slate-500 hover:text-slate-800 dark:text-zinc-400 dark:hover:text-zinc-200 font-mono flex items-center gap-1 mt-0.5 truncate"
+                title={site.url}
+              >
+                <span>{site.url.replace(/^https?:\/\//, '')}</span>
+                <ExternalLink className="w-3 h-3 shrink-0 opacity-70" />
+              </a>
+            </div>
           </div>
 
           <Badge variant={site.status === 'CONNECTED' ? 'success' : 'warning'} size="sm">
-            {site.status}
+            <span className="flex items-center gap-1">
+              <span className={`w-1.5 h-1.5 rounded-full ${site.status === 'CONNECTED' ? 'bg-emerald-500 animate-pulse' : 'bg-amber-500'}`} />
+              <span>{site.status === 'CONNECTED' ? 'Active' : site.status}</span>
+            </span>
           </Badge>
         </div>
 
-        {/* Specs & info */}
-        <div className="mt-4 pt-3 border-t border-slate-100 dark:border-zinc-800/80 space-y-2.5 text-xs text-slate-600 dark:text-zinc-400">
-          <div className="flex items-center justify-between">
-            <span className="flex items-center gap-1.5 text-slate-500">
-              <Shield className="w-3.5 h-3.5" /> Username:
-            </span>
-            <span className="font-mono font-semibold text-slate-800 dark:text-zinc-200">{site.username}</span>
-          </div>
-
-          <div className="flex items-center justify-between">
-            <span className="flex items-center gap-1.5 text-slate-500">
-              <Layers className="w-3.5 h-3.5" /> Scanned Post Types:
-            </span>
-            <span className="font-mono font-semibold text-slate-800 dark:text-zinc-200 flex items-center gap-1.5">
-              {isLoadingTypes ? (
-                <span className="flex items-center gap-1 text-slate-400 font-normal">
-                  <RefreshCw className="w-3 h-3 animate-spin text-violet-500" />
-                  Checking...
-                </span>
-              ) : (
-                <span>{types.length} Types Found</span>
-              )}
+        {/* Quick Info Badges */}
+        <div className="grid grid-cols-2 gap-2 pt-1 text-xs">
+          <div className="p-2 rounded-xl bg-slate-50 dark:bg-zinc-950 border border-slate-100 dark:border-zinc-800/80">
+            <span className="text-[10px] font-semibold text-slate-400 dark:text-zinc-500 block uppercase">Username</span>
+            <span className="font-mono font-bold text-slate-800 dark:text-zinc-200 truncate block mt-0.5">
+              {site.username}
             </span>
           </div>
+          <div className="p-2 rounded-xl bg-slate-50 dark:bg-zinc-950 border border-slate-100 dark:border-zinc-800/80">
+            <span className="text-[10px] font-semibold text-slate-400 dark:text-zinc-500 block uppercase">Post Types</span>
+            <span className="font-mono font-bold text-violet-600 dark:text-violet-400 truncate block mt-0.5">
+              {isLoadingTypes ? 'Scanning...' : `${types.length} Discovered`}
+            </span>
+          </div>
+        </div>
 
-          {/* Live Discovered Types Badges on the Card */}
-          {types && types.length > 0 && (
-            <div className="flex flex-wrap gap-1.5 pt-1">
+        {/* Discovered Content Types Tags */}
+        <div className="pt-2 border-t border-slate-100 dark:border-zinc-800/80 space-y-1.5">
+          <div className="flex items-center justify-between text-[11px] text-slate-500 dark:text-zinc-400">
+            <span className="font-semibold flex items-center gap-1">
+              <Layers className="w-3 h-3 text-violet-500" />
+              <span>Content Types</span>
+            </span>
+            <span className="font-mono text-[10px] text-slate-400">
+              {types.length} CPTs
+            </span>
+          </div>
+
+          {types && types.length > 0 ? (
+            <div className="flex flex-wrap gap-1.5 max-h-24 overflow-y-auto">
               {types.map((t: any, i: number) => {
                 const typeName = t.name || t.slug;
                 const typeSlug = t.slug || t.name;
@@ -156,8 +169,8 @@ const WebsiteCard: React.FC<WebsiteCardProps> = ({
                     key={t.id || typeSlug || i}
                     type="button"
                     onClick={() => onOpenSchema(site.id, typeSlug)}
-                    title={`Click to view schema & endpoints for ${typeName}`}
-                    className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-mono font-semibold bg-violet-50 hover:bg-violet-100 dark:bg-violet-950/40 dark:hover:bg-violet-900/60 text-violet-700 dark:text-violet-300 border border-violet-200 dark:border-violet-800/60 transition-colors cursor-pointer group"
+                    title={`Click to view schema for ${typeName}`}
+                    className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-mono font-semibold bg-violet-50 hover:bg-violet-100 dark:bg-violet-950/40 dark:hover:bg-violet-900/60 text-violet-700 dark:text-violet-300 border border-violet-200/80 dark:border-violet-800/60 transition-colors cursor-pointer group"
                   >
                     <span>{typeName}</span>
                     <Eye className="w-2.5 h-2.5 text-violet-400 group-hover:text-violet-600 dark:group-hover:text-violet-200" />
@@ -165,26 +178,39 @@ const WebsiteCard: React.FC<WebsiteCardProps> = ({
                 );
               })}
             </div>
+          ) : (
+            <p className="text-[11px] text-slate-400 italic">No content types scanned yet.</p>
           )}
 
-          <div className="flex items-center justify-between text-[11px] text-slate-400 font-mono pt-0.5">
-            <span>Last Scanned:</span>
-            <span className="truncate max-w-[190px]" title={lastScannedDisplay}>
+          <div className="flex items-center justify-between text-[11px] text-slate-400 font-mono pt-1">
+            <span>Last Scan:</span>
+            <span className="truncate max-w-[180px]" title={lastScannedDisplay}>
               {lastScannedDisplay}
             </span>
           </div>
         </div>
       </div>
 
-      {/* Quick Actions Bar */}
+      {/* Action Buttons Bar */}
       <div className="pt-3 border-t border-slate-100 dark:border-zinc-800/80 flex items-center gap-2">
+        <Button
+          variant="primary"
+          size="xs"
+          onClick={() => onDetails(site.id)}
+          icon={<ArrowRight className="w-3.5 h-3.5" />}
+          className="flex-1 font-semibold"
+          title="Open site details & content types"
+        >
+          View Details
+        </Button>
+
         <Button
           variant="outline"
           size="xs"
           onClick={() => onTest(site.id)}
           isLoading={isTesting}
           icon={<RefreshCw className="w-3 h-3 text-slate-500" />}
-          className="flex-1"
+          title="Test REST API Connection"
         >
           Test
         </Button>
@@ -195,27 +221,16 @@ const WebsiteCard: React.FC<WebsiteCardProps> = ({
           onClick={handleScanClick}
           isLoading={isScanning}
           icon={<RefreshCw className="w-3 h-3 text-violet-600 dark:text-violet-400" />}
-          className="flex-1"
+          title="Scan WordPress for Content Types"
         >
           Scan
-        </Button>
-
-        <Button
-          variant="primary"
-          size="xs"
-          onClick={() => onDetails(site.id)}
-          icon={<ArrowRight className="w-3 h-3" />}
-          className="px-2.5"
-          title="View Scanned Details"
-        >
-          Details
         </Button>
 
         <button
           type="button"
           onClick={() => onDelete(site.id, site.name)}
           disabled={isDeleting}
-          className="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 dark:hover:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/30 transition-colors cursor-pointer"
+          className="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 dark:hover:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/30 transition-colors cursor-pointer shrink-0"
           title="Delete Website"
         >
           <Trash2 className="w-3.5 h-3.5" />
@@ -235,6 +250,7 @@ export const WebsitesListScreen: React.FC = () => {
     navigateToWebsiteDetail,
     scanWebsite,
     testWebsiteConnection,
+    addToast,
   } = useApp();
 
   // Trigger loadWebsites on mount
@@ -245,6 +261,7 @@ export const WebsitesListScreen: React.FC = () => {
   const [testingId, setTestingId] = useState<string | null>(null);
   const [scanningId, setScanningId] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [siteToDelete, setSiteToDelete] = useState<{ id: string; name: string } | null>(null);
 
   // Content type schema modal state
   const [selectedSchema, setSelectedSchema] = useState<ContentTypeDetailDto | null>(null);
@@ -269,14 +286,30 @@ export const WebsitesListScreen: React.FC = () => {
     }
   };
 
-  const handleDeleteWebsite = async (id: string, name: string) => {
-    if (window.confirm(`Are you sure you want to remove "${name}"?`)) {
-      setDeletingId(id);
-      try {
-        await deleteWebsite(id);
-      } finally {
-        setDeletingId(null);
-      }
+  const openDeleteSiteConfirm = (id: string, name: string) => {
+    setSiteToDelete({ id, name });
+  };
+
+  const handleConfirmDeleteSite = async () => {
+    if (!siteToDelete) return;
+    const { id, name } = siteToDelete;
+    setDeletingId(id);
+    try {
+      await deleteWebsite(id);
+      addToast({
+        title: 'Website Removed',
+        message: `Website "${name}" was disconnected and removed successfully.`,
+        type: 'info',
+      });
+      setSiteToDelete(null);
+    } catch (err: any) {
+      addToast({
+        title: 'Delete Failed',
+        message: err.message || 'Could not remove website.',
+        type: 'error',
+      });
+    } finally {
+      setDeletingId(null);
     }
   };
 
@@ -375,7 +408,7 @@ export const WebsitesListScreen: React.FC = () => {
               onTest={handleTestConnection}
               onScan={handleScanWebsite}
               onDetails={navigateToWebsiteDetail}
-              onDelete={handleDeleteWebsite}
+              onDelete={openDeleteSiteConfirm}
               onOpenSchema={handleOpenSchemaDetail}
               isTesting={testingId === site.id}
               isScanning={scanningId === site.id}
@@ -395,6 +428,53 @@ export const WebsitesListScreen: React.FC = () => {
         loading={isSchemaLoading}
         contentType={selectedSchema}
       />
+
+      {/* Delete Website Confirmation Modal */}
+      <Modal
+        isOpen={!!siteToDelete}
+        onClose={() => setSiteToDelete(null)}
+        title="Remove Website"
+        maxWidth="md"
+      >
+        <div className="space-y-4">
+          <div className="flex items-start gap-3">
+            <div className="w-10 h-10 rounded-xl bg-rose-50 dark:bg-rose-950/50 border border-rose-200 dark:border-rose-900/50 flex items-center justify-center shrink-0 text-rose-600 dark:text-rose-400">
+              <AlertTriangle className="w-5 h-5" />
+            </div>
+            <div className="space-y-1">
+              <p className="text-xs text-slate-600 dark:text-zinc-300">
+                Are you sure you want to disconnect and remove this website?
+              </p>
+              <p className="text-xs font-semibold text-slate-900 dark:text-zinc-100 break-words">
+                &ldquo;{siteToDelete?.name}&rdquo;
+              </p>
+              <p className="text-[11px] text-slate-400">
+                This will remove the site credentials and saved settings from your dashboard.
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-center justify-end gap-2.5 pt-3 border-t border-slate-100 dark:border-zinc-800">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setSiteToDelete(null)}
+              disabled={!!deletingId}
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              size="sm"
+              onClick={handleConfirmDeleteSite}
+              isLoading={!!deletingId}
+              icon={<Trash2 className="w-3.5 h-3.5" />}
+            >
+              Remove Website
+            </Button>
+          </div>
+        </div>
+      </Modal>
     </div>
   );
 };

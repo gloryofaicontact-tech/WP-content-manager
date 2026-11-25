@@ -147,10 +147,12 @@ export interface ImageAssetDto {
   title: string;
   previewUrl: string;
   sourceUrl?: string;
+  elementsSearchUrl?: string;
   downloadUrl?: string;
   author?: string;
   width?: number;
   height?: number;
+  isLicensed?: boolean;
   provider?: string;
   [key: string]: any;
 }
@@ -160,6 +162,8 @@ export interface ProcessedArticleImageItemDto {
   position?: string;
   recommendedSearch?: string;
   fallbackSearch?: string;
+  elementsSearchUrl?: string;
+  isPreviewOnly?: boolean;
   altText?: string;
   targetHeading?: string;
   selectedAsset?: ImageAssetDto | null;
@@ -212,7 +216,8 @@ export interface UpdateWebsiteArticleDto {
 }
 
 export interface PublishWebsiteArticleDto {
-  status: 'publish' | 'draft' | string;
+  status: 'publish' | 'draft' | 'pending' | string;
+  allowPreviewImages?: boolean;
 }
 
 export interface WebsiteArticlesResponseDto {

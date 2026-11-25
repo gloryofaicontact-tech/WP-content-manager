@@ -29,6 +29,12 @@ export const API_ENDPOINTS = {
       `/websites/${websiteId}/articles/${articleId}`,
     PUBLISH_ARTICLE: (websiteId: string, articleId: string) =>
       `/websites/${websiteId}/articles/${articleId}/publish`,
+    ARTICLE_MEDIA: (websiteId: string, articleId: string) =>
+      `/websites/${websiteId}/articles/${articleId}/media`,
+    ARTICLE_MEDIA_SELECT: (websiteId: string, articleId: string) =>
+      `/websites/${websiteId}/articles/${articleId}/media/select`,
+    ARTICLE_MEDIA_SEARCH: (websiteId: string, articleId: string) =>
+      `/websites/${websiteId}/articles/${articleId}/media/search`,
   },
   CONTENT_TYPES: {
     DISCOVER: '/content-types/discover',
