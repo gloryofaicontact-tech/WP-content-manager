@@ -8,6 +8,9 @@ import type {
   EnhanceArticleDto,
   EnhanceArticleResponseDto,
   PublishArticleResponseDto,
+  ContentSnapshotsResponseDto,
+  ContentSnapshotDetailDto,
+  ContentSnapshotDetailResponseDto,
 } from '../types/article.dto';
 
 export const articlesService = {
@@ -65,6 +68,50 @@ export const articlesService = {
   async publishArticle(id: string): Promise<PublishArticleResponseDto> {
     const response = await apiClient.post<PublishArticleResponseDto>(
       API_ENDPOINTS.ARTICLES.PUBLISH(id)
+    );
+    return response.data;
+  },
+
+  /**
+   * GET {{baseUrl}}/articles/snapshots?workflowStatus=IMPORTED&page=1&limit=10
+   */
+  async getSnapshots(params?: {
+    workflowStatus?: string;
+    page?: number;
+    limit?: number;
+    websiteId?: string;
+  }): Promise<ContentSnapshotsResponseDto> {
+    const response = await apiClient.get<ContentSnapshotsResponseDto>(
+      API_ENDPOINTS.ARTICLES.SNAPSHOTS,
+      {
+        params: {
+          workflowStatus: params?.workflowStatus || undefined,
+          page: params?.page ?? 1,
+          limit: params?.limit ?? 10,
+          websiteId: params?.websiteId || undefined,
+        },
+      }
+    );
+    return response.data;
+  },
+
+  /**
+   * GET {{baseUrl}}/articles/snapshots/{{snapshotId}}
+   */
+  async getSnapshotDetail(snapshotId: string): Promise<ContentSnapshotDetailDto> {
+    const response = await apiClient.get<ContentSnapshotDetailResponseDto>(
+      API_ENDPOINTS.ARTICLES.SNAPSHOT_DETAIL(snapshotId)
+    );
+    const resData: any = response.data;
+    return resData?.data || resData;
+  },
+
+  /**
+   * DELETE {{baseUrl}}/articles/snapshots/{{snapshotId}}
+   */
+  async deleteSnapshot(snapshotId: string): Promise<{ success: boolean; message?: string }> {
+    const response = await apiClient.delete<{ success: boolean; message?: string }>(
+      API_ENDPOINTS.ARTICLES.SNAPSHOT_DETAIL(snapshotId)
     );
     return response.data;
   },

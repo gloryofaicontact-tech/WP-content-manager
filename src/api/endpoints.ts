@@ -33,6 +33,8 @@ export const API_ENDPOINTS = {
     ENHANCE: (id: string) => `/articles/${id}/enhance`,
     ENHANCE_DRAFT: '/articles/enhance-draft',
     PUBLISH: (id: string) => `/articles/${id}/publish`,
+    SNAPSHOTS: '/articles/snapshots',
+    SNAPSHOT_DETAIL: (snapshotId: string) => `/articles/snapshots/${snapshotId}`,
   },
   USERS: {
     PROFILE: '/users/profile',

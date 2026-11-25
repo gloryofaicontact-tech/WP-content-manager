@@ -130,18 +130,25 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       const res = await websitesService.getWebsites(params);
       if (res && Array.isArray(res.data)) {
         // Map backend entities to frontend WordPressSite model
-        const initialMapped: WordPressSite[] = res.data.map((item: any, idx: number) => ({
-          id: String(item.id ?? item._id ?? `site-${idx + 1}`),
-          name: item.name || item.title || 'Untitled Site',
-          url: item.url || item.siteUrl || item.domain || '',
-          username: item.username || item.user || 'admin',
-          applicationPassword: '•••• •••• •••• ••••',
-          status: item.status === 'ERROR' ? 'ERROR' : (item.status || 'CONNECTED'),
-          totalArticles: Number(item.totalArticles ?? item.articlesCount ?? 0),
-          lastScanned: item.lastScanned ? new Date(item.lastScanned).toLocaleString() : (item.scannedAt || 'Never'),
-          discoveredTypes: Array.isArray(item.discoveredTypes) && item.discoveredTypes.length > 0 ? item.discoveredTypes : [],
-        }));
+        const initialMapped: WordPressSite[] = res.data.map((item: any, idx: number) => {
+          const rawTypes = item.contentTypes || item.discoveredTypes;
+          const initialTypes = Array.isArray(rawTypes) ? rawTypes : [];
+          const rawDate = item.lastScanned || item.lastDiscoveredAt || item.scannedAt;
 
+          return {
+            id: String(item.id ?? item._id ?? `site-${idx + 1}`),
+            name: item.name || item.title || 'Untitled Site',
+            url: item.url || item.siteUrl || item.domain || '',
+            username: item.username || item.user || 'admin',
+            applicationPassword: '•••• •••• •••• ••••',
+            status: item.status === 'ERROR' ? 'ERROR' : (item.status || 'CONNECTED'),
+            totalArticles: Number(item.totalArticles ?? item.articlesCount ?? 0),
+            lastScanned: rawDate ? new Date(rawDate).toLocaleString() : 'Never',
+            discoveredTypes: initialTypes.length > 0 ? initialTypes : [],
+          };
+        });
+
+        // Set initial sites immediately so the UI is responsive
         setSites(initialMapped);
         if (initialMapped.length > 0) {
           setActiveSiteId(prev => prev || initialMapped[0].id);
@@ -151,16 +158,22 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         const updatedSites = await Promise.all(
           initialMapped.map(async site => {
             try {
-              const typesRes = await websitesService.getContentTypes(site.id);
-              const typesList = Array.isArray(typesRes?.data) ? typesRes.data : [];
+              const typesRes: any = await websitesService.getContentTypes(site.id);
+              const typesList = Array.isArray(typesRes?.data)
+                ? typesRes.data
+                : Array.isArray(typesRes)
+                ? typesRes
+                : Array.isArray(typesRes?.data?.data)
+                ? typesRes.data.data
+                : [];
+
               if (typesList.length > 0) {
                 // Find latest discovery date
                 const latestDate = typesList.reduce((latest: string | null, curr: any) => {
-                  if (!curr.lastDiscoveredAt) return latest;
-                  if (!latest) return curr.lastDiscoveredAt;
-                  return new Date(curr.lastDiscoveredAt) > new Date(latest)
-                    ? curr.lastDiscoveredAt
-                    : latest;
+                  const d = curr.lastDiscoveredAt || curr.updatedAt;
+                  if (!d) return latest;
+                  if (!latest) return d;
+                  return new Date(d) > new Date(latest) ? d : latest;
                 }, null);
 
                 return {
@@ -168,7 +181,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
                   discoveredTypes: typesList.map((t: any, tIdx: number) => ({
                     id: t.id || `type-${tIdx + 1}`,
                     slug: t.slug,
-                    name: t.name,
+                    name: t.name || t.slug,
                     restNamespace: t.restNamespace || 'wp/v2',
                     restBase: t.restBase || t.slug,
                     hierarchical: !!t.hierarchical,
@@ -412,10 +425,29 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     try {
       const response = await websitesService.discoverContentTypes(siteId);
-      const items = Array.isArray(response.data) ? response.data : (response as any);
+
+      // Immediately fetch stored content types from database to ensure fresh synchronized data
+      let items: any[] = [];
+      try {
+        const typesRes: any = await websitesService.getContentTypes(siteId);
+        items = Array.isArray(typesRes?.data)
+          ? typesRes.data
+          : Array.isArray(typesRes)
+          ? typesRes
+          : Array.isArray(typesRes?.data?.data)
+          ? typesRes.data.data
+          : [];
+      } catch {
+        const resData: any = response;
+        items = Array.isArray(resData?.data)
+          ? resData.data
+          : Array.isArray(resData)
+          ? resData
+          : [];
+      }
       
       // Map discovered backend items to frontend ContentType format
-      const mappedTypes = Array.isArray(items) ? items.map((item: any, idx: number) => {
+      const mappedTypes = items.map((item: any, idx: number) => {
         const rawTaxes = Array.isArray(item.taxonomies) ? item.taxonomies : [];
         const formattedTaxonomies = rawTaxes.map((tax: any, tIdx: number) => {
           if (typeof tax === 'string') {
@@ -446,14 +478,21 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           customFields: item.customFields || [],
           isScanned: true,
         };
-      }) : [];
+      });
+
+      const latestDate = items.reduce((latest: string | null, curr: any) => {
+        const d = curr.lastDiscoveredAt || curr.updatedAt;
+        if (!d) return latest;
+        if (!latest) return d;
+        return new Date(d) > new Date(latest) ? d : latest;
+      }, null);
 
       setSites(prev =>
         prev.map(s =>
           s.id === siteId
             ? {
                 ...s,
-                lastScanned: 'Just now',
+                lastScanned: latestDate ? new Date(latestDate).toLocaleString() : 'Just now',
                 discoveredTypes: mappedTypes,
               }
             : s

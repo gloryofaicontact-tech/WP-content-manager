@@ -13,7 +13,7 @@ import {
 
 export const Sidebar: React.FC = () => {
   const { currentScreen, setCurrentScreen, sites, activeSiteId, navigateToNewArticle, setIsAddWebsiteModalOpen } = useApp();
-  const { stats } = useArticles();
+  const { stats, activeSiteArticlesCount } = useArticles();
 
   const activeSite = sites.find(s => s.id === activeSiteId) || sites[0] || null;
 
@@ -38,7 +38,7 @@ export const Sidebar: React.FC = () => {
       id: 'articles',
       label: 'Articles',
       icon: <FileText className="w-4 h-4" />,
-      badge: stats.totalArticles,
+      badge: activeSiteArticlesCount,
     },
     {
       id: 'settings',

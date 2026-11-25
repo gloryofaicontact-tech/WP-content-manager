@@ -41,6 +41,8 @@ interface ArticleContextType {
     published: number;
     drafts: number;
   };
+  activeSiteArticlesCount: number;
+  refreshActiveSiteArticlesCount: (siteId?: string) => Promise<void>;
 }
 
 const ArticleContext = createContext<ArticleContextType | undefined>(undefined);
@@ -61,6 +63,9 @@ export const ArticleProvider: React.FC<{ children: React.ReactNode }> = ({ child
     totalItems: 0,
     totalPages: 1,
   });
+
+  // Dedicated state for the full total articles count of the navbar-selected website
+  const [activeSiteArticlesCount, setActiveSiteArticlesCount] = useState<number>(0);
 
   // Load live content from GET /websites/:websiteId/content/:contentTypeSlug?page=xxx&limit=xxx&search=xxx
   const loadLiveArticles = async (
@@ -150,6 +155,11 @@ export const ArticleProvider: React.FC<{ children: React.ReactNode }> = ({ child
         totalItems: aggregatedTotal || flattened.length,
         totalPages: Math.max(1, calculatedTotalPages || Math.ceil(flattened.length / prev.limit)),
       }));
+
+      // If fetching default broad view (no search filter and all types), sync full count
+      if ((!chosenType || chosenType === 'ALL') && !searchParam.trim() && aggregatedTotal > 0) {
+        setActiveSiteArticlesCount(aggregatedTotal);
+      }
     } catch {
       setArticles([]);
     } finally {
@@ -203,12 +213,84 @@ export const ArticleProvider: React.FC<{ children: React.ReactNode }> = ({ child
     }
   };
 
+  // Function to query and calculate the full total articles count of the navbar-selected website
+  const refreshActiveSiteArticlesCount = async (siteId?: string) => {
+    const targetId = siteId || activeSiteId || sites[0]?.id;
+    if (!targetId) {
+      setActiveSiteArticlesCount(0);
+      return;
+    }
+
+    const currentSite = sites.find(s => s.id === targetId);
+    if (currentSite?.totalArticles && currentSite.totalArticles > 0) {
+      setActiveSiteArticlesCount(currentSite.totalArticles);
+    }
+
+    // Determine content types to count for the target site
+    let typeSlugs: string[] = [];
+    if (currentSite?.discoveredTypes && currentSite.discoveredTypes.length > 0) {
+      typeSlugs = currentSite.discoveredTypes.map(t => t.slug);
+    } else {
+      try {
+        const typesRes: any = await websitesService.getContentTypes(targetId);
+        const list = Array.isArray(typesRes?.data)
+          ? typesRes.data
+          : Array.isArray(typesRes)
+          ? typesRes
+          : Array.isArray(typesRes?.data?.data)
+          ? typesRes.data.data
+          : [];
+        if (list.length > 0) {
+          typeSlugs = list.map((t: any) => t.slug);
+        }
+      } catch {
+        // Fallback
+      }
+    }
+
+    if (typeSlugs.length === 0) {
+      typeSlugs = ['post'];
+    }
+
+    try {
+      let totalLiveCount = 0;
+      await Promise.all(
+        typeSlugs.map(async slug => {
+          try {
+            const res = await websitesService.getLiveContent(targetId, slug, {
+              page: 1,
+              limit: 1,
+            });
+            const paginationMeta = res?.data?.meta?.pagination;
+            if (paginationMeta && typeof paginationMeta.totalItems === 'number') {
+              totalLiveCount += paginationMeta.totalItems;
+            } else {
+              const list = res?.data?.data || (Array.isArray(res?.data) ? res.data : []);
+              totalLiveCount += list.length;
+            }
+          } catch {
+            // Content type may be empty or failed
+          }
+        })
+      );
+
+      if (totalLiveCount > 0 || !currentSite?.totalArticles) {
+        setActiveSiteArticlesCount(totalLiveCount);
+      }
+    } catch {
+      // Keep existing count
+    }
+  };
+
   // Re-fetch live articles when active website (from navbar) or postType changes
   useEffect(() => {
     if (activeSiteId) {
       loadLiveArticles(activeSiteId, filters.postType, filters.searchQuery, 1);
+      refreshActiveSiteArticlesCount(activeSiteId);
+    } else if (sites[0]?.id) {
+      refreshActiveSiteArticlesCount(sites[0].id);
     }
-  }, [activeSiteId, filters.postType]);
+  }, [activeSiteId, filters.postType, sites]);
 
   const filteredArticles = useMemo(() => {
     return articles.filter(art => {
@@ -225,11 +307,11 @@ export const ArticleProvider: React.FC<{ children: React.ReactNode }> = ({ child
   const stats = useMemo(() => {
     return {
       totalWebsites: sites.length,
-      totalArticles: articles.length,
+      totalArticles: activeSiteArticlesCount,
       published: articles.filter(a => a.status === 'Published').length,
       drafts: articles.filter(a => a.status !== 'Published').length,
     };
-  }, [sites, articles]);
+  }, [sites.length, activeSiteArticlesCount, articles]);
 
   const addArticle = (data: Omit<Article, 'id' | 'createdAt' | 'updatedAt'>) => {
     const newArticle: Article = {
@@ -316,6 +398,8 @@ export const ArticleProvider: React.FC<{ children: React.ReactNode }> = ({ child
         updateArticle,
         publishArticleToWP,
         stats,
+        activeSiteArticlesCount,
+        refreshActiveSiteArticlesCount,
       }}
     >
       {children}
