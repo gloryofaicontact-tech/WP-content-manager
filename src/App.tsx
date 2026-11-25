@@ -1,4 +1,5 @@
-import React from 'react';
+import React, { useState } from 'react';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { ThemeProvider } from './context/ThemeContext';
 import { AppProvider, useApp } from './context/AppContext';
 import { ArticleProvider } from './context/ArticleContext';
@@ -61,11 +62,26 @@ const MainAppContent: React.FC = () => {
 };
 
 export default function App() {
+  const [queryClient] = useState(
+    () =>
+      new QueryClient({
+        defaultOptions: {
+          queries: {
+            refetchOnWindowFocus: false,
+            retry: 1,
+            staleTime: 60 * 1000,
+          },
+        },
+      })
+  );
+
   return (
-    <ThemeProvider>
-      <AppProvider>
-        <MainAppContent />
-      </AppProvider>
-    </ThemeProvider>
+    <QueryClientProvider client={queryClient}>
+      <ThemeProvider>
+        <AppProvider>
+          <MainAppContent />
+        </AppProvider>
+      </ThemeProvider>
+    </QueryClientProvider>
   );
 }
