@@ -67,6 +67,14 @@ interface AppContextType {
   navigateToWebsiteDetail: (siteId: string) => void;
   navigateToNewArticle: () => void;
 
+  // Layout & Sidebar
+  isSidebarCollapsed: boolean;
+  setIsSidebarCollapsed: React.Dispatch<React.SetStateAction<boolean>>;
+  toggleSidebarCollapse: () => void;
+  isMobileSidebarOpen: boolean;
+  setIsMobileSidebarOpen: React.Dispatch<React.SetStateAction<boolean>>;
+  toggleMobileSidebar: () => void;
+
   // Toasts
   toasts: ToastItem[];
   addToast: (toast: Omit<ToastItem, 'id'>) => void;
@@ -128,6 +136,35 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [selectedArticleIdForEdit, setSelectedArticleIdForEdit] = useState<string | null>(null);
   const [isAddWebsiteModalOpen, setIsAddWebsiteModalOpen] = useState(false);
   const [toasts, setToasts] = useState<ToastItem[]>([]);
+
+  // Sidebar minimizing state
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState<boolean>(() => {
+    try {
+      return localStorage.getItem('wp_sidebar_collapsed') === 'true';
+    } catch {
+      return false;
+    }
+  });
+
+  const toggleSidebarCollapse = () => {
+    setIsSidebarCollapsed(prev => {
+      const next = !prev;
+      try {
+        localStorage.setItem('wp_sidebar_collapsed', String(next));
+      } catch {}
+      return next;
+    });
+  };
+
+  const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState<boolean>(false);
+  const toggleMobileSidebar = () => {
+    setIsMobileSidebarOpen(prev => !prev);
+  };
+
+  // Auto-close mobile sidebar when switching screens
+  useEffect(() => {
+    setIsMobileSidebarOpen(false);
+  }, [currentScreen]);
 
   // Function to load websites from backend GET /websites?page=1&limit=10
   // Also fetches GET /websites/:id/content-types to populate live scanned types count and date
@@ -611,6 +648,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         removeToast,
         navigateToWebsiteDetail,
         navigateToNewArticle,
+        isSidebarCollapsed,
+        setIsSidebarCollapsed,
+        toggleSidebarCollapse,
+        isMobileSidebarOpen,
+        setIsMobileSidebarOpen,
+        toggleMobileSidebar,
       }}
     >
       {children}
