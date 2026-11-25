@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useApp } from '../../context/AppContext';
 import { useTheme } from '../../context/ThemeContext';
+import { NotificationsDropdown } from './NotificationsDropdown';
 import {
   Globe,
   ChevronDown,
@@ -8,7 +9,6 @@ import {
   Moon,
   LogOut,
   Menu,
-  Bell,
   Check,
   Plus,
   Search,
@@ -295,21 +295,8 @@ export const TopNavbar: React.FC = () => {
           )}
         </button>
 
-        {/* Notifications */}
-        <button
-          onClick={() =>
-            addToast({
-              title: 'All Systems Operational',
-              message: 'REST API connections are active and ready to publish.',
-              type: 'info',
-            })
-          }
-          className="relative p-2 text-slate-500 hover:text-slate-900 dark:text-zinc-400 dark:hover:text-zinc-200 hover:bg-slate-100 dark:hover:bg-zinc-900 rounded-xl border border-slate-200 dark:border-zinc-800 transition-colors cursor-pointer"
-          title="Notifications"
-        >
-          <Bell className="w-4 h-4" />
-          <span className="absolute top-1.5 right-1.5 w-2 h-2 rounded-full bg-violet-600 ring-2 ring-white dark:ring-zinc-950" />
-        </button>
+        {/* Interactive Notifications Popover */}
+        <NotificationsDropdown />
 
         {/* User Profile Avatar & Info */}
         <div className="flex items-center gap-2 pl-2 border-l border-slate-200 dark:border-zinc-800">

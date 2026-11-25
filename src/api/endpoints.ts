@@ -60,4 +60,12 @@ export const API_ENDPOINTS = {
     AI: '/settings/ai',
     TEST_AI: '/settings/ai/test',
   },
+  NOTIFICATIONS: {
+    BASE: '/notifications',
+    UNREAD_COUNT: '/notifications/unread-count',
+    READ: (id: string) => `/notifications/${id}/read`,
+    MARK_ALL_READ: '/notifications/mark-all-read',
+    DELETE: (id: string) => `/notifications/${id}`,
+    DELETE_ALL: '/notifications',
+  },
 } as const;
