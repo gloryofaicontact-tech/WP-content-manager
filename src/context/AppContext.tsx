@@ -1,6 +1,8 @@
-import React, { createContext, useContext, useState } from 'react';
+import React, { createContext, useContext, useState, useEffect } from 'react';
 import type { WordPressSite } from '../types/wordpress';
 import { mockSites, mockDefaultContentTypes } from '../data/mockSites';
+import { authService } from '../api/services/auth.service';
+import type { LoginDto, RegisterDto } from '../api/types/auth.dto';
 
 export type ScreenId = 'dashboard' | 'websites' | 'website-detail' | 'articles' | 'article-new' | 'settings';
 
@@ -12,6 +14,7 @@ export interface ToastItem {
 }
 
 export interface UserProfile {
+  id?: string;
   fullName: string;
   email: string;
   role: string;
@@ -27,8 +30,8 @@ interface AppContextType {
   currentUser: UserProfile | null;
   authMode: 'login' | 'register';
   setAuthMode: (mode: 'login' | 'register') => void;
-  login: (data: { email: string; password: string; deviceName?: string }) => boolean;
-  register: (data: { fullName: string; email: string; password: string; confirmPassword?: string }) => boolean;
+  login: (data: LoginDto) => Promise<boolean>;
+  register: (data: RegisterDto) => Promise<boolean>;
   logout: () => void;
 
   // Websites
@@ -58,10 +61,46 @@ interface AppContextType {
 const AppContext = createContext<AppContextType | undefined>(undefined);
 
 export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  // Authentication State (default false so user sees the login/register screen first)
-  const [isAuthenticated, setIsAuthenticated] = useState<boolean>(false);
-  const [currentUser, setCurrentUser] = useState<UserProfile | null>(null);
+  const [isAuthenticated, setIsAuthenticated] = useState<boolean>(() => authService.hasToken());
+  const [currentUser, setCurrentUser] = useState<UserProfile | null>(() => {
+    const cached = authService.getCachedUser();
+    if (cached) {
+      return {
+        id: cached.id,
+        fullName: cached.fullName || cached.name || 'User',
+        email: cached.email,
+        role: cached.role || 'Editor',
+      };
+    }
+    return null;
+  });
   const [authMode, setAuthMode] = useState<'login' | 'register'>('login');
+
+  // Validate session with NestJS on mount if token exists
+  useEffect(() => {
+    if (authService.hasToken()) {
+      authService
+        .getProfile()
+        .then(profile => {
+          if (profile) {
+            setCurrentUser({
+              id: profile.id,
+              fullName: profile.fullName || profile.name || 'User',
+              email: profile.email,
+              role: profile.role || 'Editor',
+            });
+            setIsAuthenticated(true);
+          }
+        })
+        .catch(() => {
+          // If token refresh also failed or backend rejected token
+          if (!authService.hasToken()) {
+            setIsAuthenticated(false);
+            setCurrentUser(null);
+          }
+        });
+    }
+  }, []);
 
   // Application State
   const [currentScreen, setCurrentScreen] = useState<ScreenId>('dashboard');
@@ -84,46 +123,82 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setToasts(prev => prev.filter(t => t.id !== id));
   };
 
-  const login = (data: { email: string; password: string; deviceName?: string }) => {
-    // Validate credentials
-    const user: UserProfile = {
-      fullName: data.email.includes('editor') ? 'John Editor' : 'Administrator',
-      email: data.email,
-      role: 'Editor',
-    };
+  const login = async (data: LoginDto): Promise<boolean> => {
+    try {
+      const response = await authService.login(data);
+      const root = response.data || response;
+      const userObj = root.user;
 
-    setCurrentUser(user);
-    setIsAuthenticated(true);
-    setCurrentScreen('dashboard');
+      const user: UserProfile = {
+        id: userObj?.id,
+        fullName: userObj?.fullName || userObj?.name || (data.email.includes('editor') ? 'John Editor' : 'User'),
+        email: userObj?.email || data.email,
+        role: userObj?.role || 'Editor',
+      };
 
-    addToast({
-      title: 'Welcome Back!',
-      message: `Signed in as ${user.fullName} (${user.email}). Device: ${data.deviceName || 'Postman Desktop Client'}`,
-      type: 'success',
-    });
-    return true;
+      setCurrentUser(user);
+      setIsAuthenticated(true);
+      setCurrentScreen('dashboard');
+
+      addToast({
+        title: 'Welcome Back!',
+        message: `Signed in as ${user.fullName} (${user.email}).`,
+        type: 'success',
+      });
+      return true;
+    } catch (err: any) {
+      const errorMsg =
+        err.response?.data?.message ||
+        err.message ||
+        'Failed to connect to authentication server. Please check your backend is running.';
+      addToast({
+        title: 'Login Failed',
+        message: Array.isArray(errorMsg) ? errorMsg.join(', ') : errorMsg,
+        type: 'error',
+      });
+      throw err;
+    }
   };
 
-  const register = (data: { fullName: string; email: string; password: string; confirmPassword?: string }) => {
-    const user: UserProfile = {
-      fullName: data.fullName,
-      email: data.email,
-      role: 'Editor',
-    };
+  const register = async (data: RegisterDto): Promise<boolean> => {
+    try {
+      const response = await authService.register(data);
+      const root = response.data || response;
+      const userObj = root.user;
 
-    setCurrentUser(user);
-    setIsAuthenticated(true);
-    setCurrentScreen('dashboard');
+      const user: UserProfile = {
+        id: userObj?.id,
+        fullName: userObj?.fullName || data.fullName,
+        email: userObj?.email || data.email,
+        role: userObj?.role || 'Editor',
+      };
 
-    addToast({
-      title: 'Account Created Successfully!',
-      message: `Welcome to WP-Automation, ${user.fullName}. You can now connect sites and publish articles.`,
-      type: 'success',
-    });
-    return true;
+      setCurrentUser(user);
+      setIsAuthenticated(true);
+      setCurrentScreen('dashboard');
+
+      addToast({
+        title: 'Account Created Successfully!',
+        message: `Welcome to WP-Automation, ${user.fullName}.`,
+        type: 'success',
+      });
+      return true;
+    } catch (err: any) {
+      const errorMsg =
+        err.response?.data?.message ||
+        err.message ||
+        'Registration failed. Please check backend response.';
+      addToast({
+        title: 'Registration Failed',
+        message: Array.isArray(errorMsg) ? errorMsg.join(', ') : errorMsg,
+        type: 'error',
+      });
+      throw err;
+    }
   };
 
   const logout = () => {
+    authService.logout();
     setIsAuthenticated(false);
     setCurrentUser(null);
     setAuthMode('login');

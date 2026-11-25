@@ -32,7 +32,7 @@ export const AuthScreen: React.FC = () => {
 
   const [isLoading, setIsLoading] = useState(false);
 
-  const handleLoginSubmit = (e: React.FormEvent) => {
+  const handleLoginSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!loginEmail.trim() || !loginPassword.trim()) {
       addToast({
@@ -44,17 +44,20 @@ export const AuthScreen: React.FC = () => {
     }
 
     setIsLoading(true);
-    setTimeout(() => {
-      login({
+    try {
+      await login({
         email: loginEmail.trim(),
         password: loginPassword,
         deviceName: 'Postman Desktop Client',
       });
+    } catch {
+      // Error toast is already displayed inside AppContext login handler
+    } finally {
       setIsLoading(false);
-    }, 600);
+    }
   };
 
-  const handleRegisterSubmit = (e: React.FormEvent) => {
+  const handleRegisterSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!fullName.trim() || !regEmail.trim() || !regPassword.trim() || !confirmPassword.trim()) {
       addToast({
@@ -75,15 +78,18 @@ export const AuthScreen: React.FC = () => {
     }
 
     setIsLoading(true);
-    setTimeout(() => {
-      register({
+    try {
+      await register({
         fullName: fullName.trim(),
         email: regEmail.trim(),
         password: regPassword,
-        confirmPassword,
+        confirmPassword: confirmPassword,
       });
+    } catch {
+      // Error toast is already displayed inside AppContext register handler
+    } finally {
       setIsLoading(false);
-    }, 600);
+    }
   };
 
   return (

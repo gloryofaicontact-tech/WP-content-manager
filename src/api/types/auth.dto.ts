@@ -4,6 +4,10 @@ export interface LoginDto {
   deviceName?: string;
 }
 
+export interface RefreshTokenDto {
+  refreshToken: string;
+}
+
 export interface RegisterDto {
   email: string;
   password: string;
@@ -12,18 +16,28 @@ export interface RegisterDto {
 }
 
 export interface UserProfileDto {
-  id: string;
+  id?: string;
   email: string;
-  fullName: string;
-  role: 'Admin' | 'Editor' | 'Author';
+  fullName?: string;
+  name?: string;
+  role?: 'Admin' | 'Editor' | 'Author' | string;
   createdAt?: string;
   updatedAt?: string;
 }
 
 export interface AuthResponseDto {
-  accessToken: string;
+  accessToken?: string;
+  access_token?: string;
   refreshToken?: string;
-  user: UserProfileDto;
+  refresh_token?: string;
+  user?: UserProfileDto;
+  data?: {
+    accessToken?: string;
+    access_token?: string;
+    refreshToken?: string;
+    refresh_token?: string;
+    user?: UserProfileDto;
+  };
   tokenType?: string;
   expiresIn?: number;
 }
