@@ -282,15 +282,23 @@ export const ArticleProvider: React.FC<{ children: React.ReactNode }> = ({ child
     }
   };
 
-  // Re-fetch live articles when active website (from navbar) or postType changes
+  // Re-fetch live articles when active website (from navbar) changes
   useEffect(() => {
     if (activeSiteId) {
-      loadLiveArticles(activeSiteId, filters.postType, filters.searchQuery, 1);
+      setFilters(prev => ({ ...prev, postType: 'ALL' }));
+      loadLiveArticles(activeSiteId, 'ALL', filters.searchQuery, 1);
       refreshActiveSiteArticlesCount(activeSiteId);
     } else if (sites[0]?.id) {
       refreshActiveSiteArticlesCount(sites[0].id);
     }
-  }, [activeSiteId, filters.postType, sites]);
+  }, [activeSiteId]);
+
+  // Handle postType filter changes
+  useEffect(() => {
+    if (activeSiteId && filters.postType !== 'ALL') {
+      loadLiveArticles(activeSiteId, filters.postType, filters.searchQuery, 1);
+    }
+  }, [filters.postType]);
 
   const filteredArticles = useMemo(() => {
     return articles.filter(art => {

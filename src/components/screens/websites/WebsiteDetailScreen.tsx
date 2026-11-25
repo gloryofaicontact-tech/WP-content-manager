@@ -24,6 +24,7 @@ import {
 export const WebsiteDetailScreen: React.FC = () => {
   const {
     sites,
+    activeSiteId,
     selectedWebsiteIdForDetail,
     setCurrentScreen,
     setActiveSiteId,
@@ -32,7 +33,7 @@ export const WebsiteDetailScreen: React.FC = () => {
     testWebsiteConnection,
   } = useApp();
 
-  const site = sites.find(s => s.id === selectedWebsiteIdForDetail);
+  const site = sites.find(s => s.id === selectedWebsiteIdForDetail) || sites.find(s => s.id === activeSiteId) || sites[0];
 
   // Live content types list state
   const [contentTypes, setContentTypes] = useState<any[]>(site?.discoveredTypes || []);
