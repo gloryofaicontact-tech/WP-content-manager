@@ -25,6 +25,11 @@ export const WebsitesListScreen: React.FC = () => {
     testWebsiteConnection,
   } = useApp();
 
+  // Trigger loadWebsites directly on mount
+  React.useEffect(() => {
+    loadWebsites();
+  }, []);
+
   const [testingId, setTestingId] = React.useState<string | null>(null);
   const [scanningId, setScanningId] = React.useState<string | null>(null);
   const [deletingId, setDeletingId] = React.useState<string | null>(null);
@@ -155,6 +160,7 @@ export const WebsitesListScreen: React.FC = () => {
                   </span>
                   <span className="font-mono font-semibold text-slate-800 dark:text-zinc-200">{site.username}</span>
                 </div>
+
                 <div className="flex items-center justify-between">
                   <span className="flex items-center gap-1.5 text-slate-500">
                     <Layers className="w-3.5 h-3.5" /> Scanned Post Types:
@@ -163,9 +169,26 @@ export const WebsitesListScreen: React.FC = () => {
                     {site.discoveredTypes?.length || 0} Types Found
                   </span>
                 </div>
-                <div className="flex items-center justify-between text-[11px] text-slate-400 font-mono">
+
+                {/* Live Discovered Types Badges on the Card */}
+                {site.discoveredTypes && site.discoveredTypes.length > 0 && (
+                  <div className="flex flex-wrap gap-1 pt-1">
+                    {site.discoveredTypes.map((t: any, i: number) => (
+                      <span
+                        key={i}
+                        className="px-2 py-0.5 rounded-md text-[10px] font-mono font-semibold bg-violet-50 dark:bg-violet-950/40 text-violet-700 dark:text-violet-300 border border-violet-200 dark:border-violet-800/60"
+                      >
+                        {t.name || t.slug}
+                      </span>
+                    ))}
+                  </div>
+                )}
+
+                <div className="flex items-center justify-between text-[11px] text-slate-400 font-mono pt-0.5">
                   <span>Last Scanned:</span>
-                  <span>{site.lastScanned || 'Never'}</span>
+                  <span className="truncate max-w-[170px]" title={site.lastScanned}>
+                    {site.lastScanned || 'Never'}
+                  </span>
                 </div>
               </div>
             </div>

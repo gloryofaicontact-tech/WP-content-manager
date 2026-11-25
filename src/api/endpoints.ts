@@ -13,7 +13,10 @@ export const API_ENDPOINTS = {
     BASE: '/websites',
     DETAIL: (id: string) => `/websites/${id}`,
     TEST_CONNECTION: (id: string) => `/websites/${id}/test-connection`,
-    DISCOVER_TYPES: (id: string) => `/websites/${id}/discover`,
+    DISCOVER_TYPES: (id: string) => `/websites/${id}/content-types/discover`,
+    CONTENT_TYPES: (websiteId: string) => `/websites/${websiteId}/content-types`,
+    CONTENT_TYPE_DETAIL: (websiteId: string, slug: string) =>
+      `/websites/${websiteId}/content-types/${slug}`,
   },
   CONTENT_TYPES: {
     DISCOVER: '/content-types/discover',

@@ -123,30 +123,81 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [toasts, setToasts] = useState<ToastItem[]>([]);
 
   // Function to load websites from backend GET /websites?page=1&limit=10
+  // Also fetches GET /websites/:id/content-types to populate live scanned types count and date
   const loadWebsites = async (params?: WebsiteFilterParams) => {
     setIsWebsitesLoading(true);
     try {
       const res = await websitesService.getWebsites(params);
-      if (res.data) {
+      if (res && Array.isArray(res.data)) {
         // Map backend entities to frontend WordPressSite model
-        const mappedSites: WordPressSite[] = res.data.map((item, idx) => ({
-          id: item.id || `site-${idx + 1}`,
-          name: item.name,
-          url: item.url,
-          username: item.username,
+        const initialMapped: WordPressSite[] = res.data.map((item: any, idx: number) => ({
+          id: String(item.id ?? item._id ?? `site-${idx + 1}`),
+          name: item.name || item.title || 'Untitled Site',
+          url: item.url || item.siteUrl || item.domain || '',
+          username: item.username || item.user || 'admin',
           applicationPassword: '•••• •••• •••• ••••',
-          status: item.status === 'ERROR' ? 'ERROR' : 'CONNECTED',
-          totalArticles: item.totalArticles ?? 0,
-          lastScanned: item.lastScanned || 'Never',
-          discoveredTypes: item.discoveredTypes && item.discoveredTypes.length > 0 ? item.discoveredTypes : [],
+          status: item.status === 'ERROR' ? 'ERROR' : (item.status || 'CONNECTED'),
+          totalArticles: Number(item.totalArticles ?? item.articlesCount ?? 0),
+          lastScanned: item.lastScanned ? new Date(item.lastScanned).toLocaleString() : (item.scannedAt || 'Never'),
+          discoveredTypes: Array.isArray(item.discoveredTypes) && item.discoveredTypes.length > 0 ? item.discoveredTypes : [],
         }));
-        setSites(mappedSites);
-        if (mappedSites.length > 0) {
-          setActiveSiteId(prev => prev || mappedSites[0].id);
+
+        setSites(initialMapped);
+        if (initialMapped.length > 0) {
+          setActiveSiteId(prev => prev || initialMapped[0].id);
         }
+
+        // Fetch live content types in parallel for each site to ensure accurate counts on cards
+        const updatedSites = await Promise.all(
+          initialMapped.map(async site => {
+            try {
+              const typesRes = await websitesService.getContentTypes(site.id);
+              const typesList = Array.isArray(typesRes?.data) ? typesRes.data : [];
+              if (typesList.length > 0) {
+                // Find latest discovery date
+                const latestDate = typesList.reduce((latest: string | null, curr: any) => {
+                  if (!curr.lastDiscoveredAt) return latest;
+                  if (!latest) return curr.lastDiscoveredAt;
+                  return new Date(curr.lastDiscoveredAt) > new Date(latest)
+                    ? curr.lastDiscoveredAt
+                    : latest;
+                }, null);
+
+                return {
+                  ...site,
+                  discoveredTypes: typesList.map((t: any, tIdx: number) => ({
+                    id: t.id || `type-${tIdx + 1}`,
+                    slug: t.slug,
+                    name: t.name,
+                    restNamespace: t.restNamespace || 'wp/v2',
+                    restBase: t.restBase || t.slug,
+                    hierarchical: !!t.hierarchical,
+                    taxonomies: Array.isArray(t.taxonomies) ? t.taxonomies : [],
+                    customFields: t.customFields || [],
+                    isScanned: true,
+                  })),
+                  lastScanned: latestDate ? new Date(latestDate).toLocaleString() : site.lastScanned,
+                };
+              }
+            } catch {
+              // Return original site if content types not yet scanned
+            }
+            return site;
+          })
+        );
+
+        setSites(updatedSites);
       }
-    } catch {
-      // Backend may be offline or empty
+    } catch (err: any) {
+      const errorMsg =
+        err.response?.data?.message ||
+        err.message ||
+        'Could not fetch websites from server.';
+      addToast({
+        title: 'Failed to Load Websites',
+        message: Array.isArray(errorMsg) ? errorMsg.join(', ') : errorMsg,
+        type: 'error',
+      });
     } finally {
       setIsWebsitesLoading(false);
     }
@@ -355,15 +406,47 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const scanWebsite = async (siteId: string) => {
     addToast({
       title: 'Scanning WordPress Site...',
-      message: 'Querying /wp-json/wp/v2/types and taxonomies...',
+      message: 'Querying /wp-json/wp/v2/types and content-types/discover...',
       type: 'info',
     });
 
     try {
-      const result = await websitesService.discoverContentTypes(siteId);
-      const discovered = result.discoveredTypes && result.discoveredTypes.length > 0
-        ? result.discoveredTypes
-        : mockDefaultContentTypes;
+      const response = await websitesService.discoverContentTypes(siteId);
+      const items = Array.isArray(response.data) ? response.data : (response as any);
+      
+      // Map discovered backend items to frontend ContentType format
+      const mappedTypes = Array.isArray(items) ? items.map((item: any, idx: number) => {
+        const rawTaxes = Array.isArray(item.taxonomies) ? item.taxonomies : [];
+        const formattedTaxonomies = rawTaxes.map((tax: any, tIdx: number) => {
+          if (typeof tax === 'string') {
+            return {
+              id: `tax-${tIdx + 1}`,
+              name: tax,
+              slug: tax.toLowerCase().replace(/\s+/g, '-'),
+              terms: [],
+            };
+          }
+          return {
+            id: tax.id || `tax-${tIdx + 1}`,
+            name: tax.name || 'Taxonomy',
+            slug: tax.slug || 'taxonomy',
+            terms: tax.terms || [],
+          };
+        });
+
+        return {
+          id: item.id || `type-${idx + 1}`,
+          slug: item.slug || 'post',
+          name: item.name || 'Post',
+          restNamespace: item.restNamespace || 'wp/v2',
+          restBase: item.restBase || item.slug,
+          hierarchical: !!item.hierarchical,
+          schemaStatus: item.schemaStatus || 'FULLY_DISCOVERED',
+          taxonomies: formattedTaxonomies,
+          customFields: item.customFields || [],
+          isScanned: true,
+        };
+      }) : [];
 
       setSites(prev =>
         prev.map(s =>
@@ -371,7 +454,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             ? {
                 ...s,
                 lastScanned: 'Just now',
-                discoveredTypes: discovered,
+                discoveredTypes: mappedTypes,
               }
             : s
         )
@@ -379,27 +462,18 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
       addToast({
         title: 'Scan Complete',
-        message: `Discovered ${discovered.length} Post Types & Taxonomies.`,
+        message: response.message || `Discovered ${mappedTypes.length} Content Types from WordPress.`,
         type: 'success',
       });
-    } catch {
-      // Graceful fallback to client-side simulated discovery
-      setSites(prev =>
-        prev.map(s =>
-          s.id === siteId
-            ? {
-                ...s,
-                lastScanned: 'Just now',
-                discoveredTypes: mockDefaultContentTypes,
-              }
-            : s
-        )
-      );
-
+    } catch (err: any) {
+      const errorMsg =
+        err.response?.data?.message ||
+        err.message ||
+        'Failed to discover content types from WordPress REST API.';
       addToast({
-        title: 'Scan Complete',
-        message: 'Discovered 3 Post Types (Posts, Tour Packages, Destinations) & Taxonomies.',
-        type: 'success',
+        title: 'Scan Failed',
+        message: Array.isArray(errorMsg) ? errorMsg.join(', ') : errorMsg,
+        type: 'error',
       });
     }
   };

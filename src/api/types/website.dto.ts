@@ -54,6 +54,71 @@ export interface TestConnectionResultDto {
   [key: string]: any;
 }
 
+export interface DiscoveredContentTypeItemDto {
+  id: string;
+  websiteId: string;
+  slug: string;
+  name: string;
+  description?: string | null;
+  restNamespace: string;
+  restBase: string;
+  hierarchical: boolean;
+  taxonomies: string[] | any[];
+  schemaStatus?: string;
+  isActive?: boolean;
+  lastDiscoveredAt?: string;
+  [key: string]: any;
+}
+
+export interface DiscoverContentTypesResponseDto {
+  statusCode?: number;
+  success?: boolean;
+  message?: string;
+  data: DiscoveredContentTypeItemDto[];
+  meta?: {
+    timestamp?: string;
+    path?: string;
+    [key: string]: any;
+  };
+}
+
+export interface ContentTypeTaxonomyDto {
+  name: string;
+  slug: string;
+  hierarchical: boolean;
+  [key: string]: any;
+}
+
+export interface ContentTypeDetailDto {
+  id: string;
+  websiteId: string;
+  slug: string;
+  name: string;
+  description?: string | null;
+  restNamespace: string;
+  restBase: string;
+  hierarchical: boolean;
+  supports?: string[];
+  taxonomies?: ContentTypeTaxonomyDto[];
+  acfFields?: any[];
+  schemaStatus?: string;
+  isActive?: boolean;
+  lastDiscoveredAt?: string;
+  [key: string]: any;
+}
+
+export interface ContentTypeDetailResponseDto {
+  statusCode?: number;
+  success?: boolean;
+  message?: string;
+  data: ContentTypeDetailDto;
+  meta?: {
+    timestamp?: string;
+    path?: string;
+    [key: string]: any;
+  };
+}
+
 export interface DiscoverContentTypesResultDto {
   siteId?: string;
   discoveredTypes: ContentType[];

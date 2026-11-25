@@ -7,7 +7,9 @@ import type {
   WebsiteDto,
   PaginatedWebsitesResponseDto,
   TestConnectionResultDto,
-  DiscoverContentTypesResultDto,
+  DiscoverContentTypesResponseDto,
+  ContentTypeDetailResponseDto,
+  ContentTypeDetailDto,
 } from '../types/website.dto';
 
 export const websitesService = {
@@ -34,7 +36,7 @@ export const websitesService = {
    * GET {{baseUrl}}/websites?page=1&limit=10
    */
   async getWebsites(params?: WebsiteFilterParams): Promise<PaginatedWebsitesResponseDto> {
-    const response = await apiClient.get<PaginatedWebsitesResponseDto | WebsiteDto[]>(
+    const response = await apiClient.get<any>(
       API_ENDPOINTS.WEBSITES.BASE,
       {
         params: {
@@ -46,6 +48,8 @@ export const websitesService = {
     );
 
     const raw: any = response.data;
+
+    // Case 1: Direct Array [ { id, name, ... }, ... ]
     if (Array.isArray(raw)) {
       return {
         data: raw,
@@ -55,17 +59,43 @@ export const websitesService = {
       };
     }
 
+    // Case 2: Standard NestJS wrapper { data: [ ... ], total, page, ... }
     if (raw && Array.isArray(raw.data)) {
-      return raw;
-    }
-
-    if (raw && Array.isArray(raw.items)) {
       return {
-        data: raw.items,
-        total: raw.total ?? raw.items.length,
+        data: raw.data,
+        total: raw.total ?? raw.data.length,
         page: raw.page ?? params?.page ?? 1,
         limit: raw.limit ?? params?.limit ?? 10,
         totalPages: raw.totalPages,
+      };
+    }
+
+    // Case 3: NestJS pagination { items: [ ... ], meta: { totalItems, ... } }
+    if (raw && Array.isArray(raw.items)) {
+      return {
+        data: raw.items,
+        total: raw.meta?.totalItems ?? raw.total ?? raw.items.length,
+        page: raw.meta?.currentPage ?? raw.page ?? params?.page ?? 1,
+        limit: raw.meta?.itemsPerPage ?? raw.limit ?? params?.limit ?? 10,
+        totalPages: raw.meta?.totalPages ?? raw.totalPages,
+      };
+    }
+
+    // Case 4: Nested under data.items or data.data (e.g. { data: { items: [...] } })
+    if (raw && raw.data && Array.isArray(raw.data.items)) {
+      return {
+        data: raw.data.items,
+        total: raw.data.total ?? raw.data.meta?.totalItems ?? raw.data.items.length,
+        page: raw.data.page ?? params?.page ?? 1,
+        limit: raw.data.limit ?? params?.limit ?? 10,
+      };
+    }
+    if (raw && raw.data && Array.isArray(raw.data.data)) {
+      return {
+        data: raw.data.data,
+        total: raw.data.total ?? raw.data.data.length,
+        page: raw.data.page ?? params?.page ?? 1,
+        limit: raw.data.limit ?? params?.limit ?? 10,
       };
     }
 
@@ -122,11 +152,34 @@ export const websitesService = {
   },
 
   /**
-   * POST {{baseUrl}}/websites/{{websiteId}}/discover
+   * POST {{baseUrl}}/websites/{{websiteId}}/content-types/discover
    */
-  async discoverContentTypes(id: string): Promise<DiscoverContentTypesResultDto> {
-    const response = await apiClient.post<DiscoverContentTypesResultDto | { data: DiscoverContentTypesResultDto }>(
+  async discoverContentTypes(id: string): Promise<DiscoverContentTypesResponseDto> {
+    const response = await apiClient.post<DiscoverContentTypesResponseDto>(
       API_ENDPOINTS.WEBSITES.DISCOVER_TYPES(id)
+    );
+    return response.data;
+  },
+
+  /**
+   * GET {{baseUrl}}/websites/{{websiteId}}/content-types
+   */
+  async getContentTypes(websiteId: string): Promise<DiscoverContentTypesResponseDto> {
+    const response = await apiClient.get<DiscoverContentTypesResponseDto>(
+      API_ENDPOINTS.WEBSITES.CONTENT_TYPES(websiteId)
+    );
+    return response.data;
+  },
+
+  /**
+   * GET {{baseUrl}}/websites/{{websiteId}}/content-types/{{contentTypeSlug}}
+   */
+  async getContentTypeDetail(
+    websiteId: string,
+    slug: string
+  ): Promise<ContentTypeDetailDto> {
+    const response = await apiClient.get<ContentTypeDetailResponseDto>(
+      API_ENDPOINTS.WEBSITES.CONTENT_TYPE_DETAIL(websiteId, slug)
     );
     const resData: any = response.data;
     return resData?.data || resData;
