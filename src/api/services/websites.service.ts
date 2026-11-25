@@ -10,6 +10,7 @@ import type {
   DiscoverContentTypesResponseDto,
   ContentTypeDetailResponseDto,
   ContentTypeDetailDto,
+  LiveContentResponseDto,
 } from '../types/website.dto';
 
 export const websitesService = {
@@ -183,5 +184,55 @@ export const websitesService = {
     );
     const resData: any = response.data;
     return resData?.data || resData;
+  },
+
+  /**
+   * GET {{baseUrl}}/websites/{{websiteId}}/content/{{contentTypeSlug}}?page=1&limit=10&search=xxx
+   */
+  async getLiveContent(
+    websiteId: string,
+    contentTypeSlug: string,
+    params?: { page?: number; limit?: number; search?: string }
+  ): Promise<LiveContentResponseDto> {
+    const response = await apiClient.get<LiveContentResponseDto>(
+      API_ENDPOINTS.WEBSITES.LIVE_CONTENT(websiteId, contentTypeSlug),
+      {
+        params: {
+          page: params?.page ?? 1,
+          limit: params?.limit ?? 10,
+          search: params?.search || undefined,
+        },
+      }
+    );
+    return response.data;
+  },
+
+  /**
+   * GET {{baseUrl}}/websites/{{websiteId}}/content/{{contentTypeSlug}}/{{wpPostId}}
+   */
+  async getLiveContentItem(
+    websiteId: string,
+    contentTypeSlug: string,
+    wpPostId: number | string
+  ): Promise<any> {
+    const response = await apiClient.get<any>(
+      API_ENDPOINTS.WEBSITES.LIVE_CONTENT_ITEM(websiteId, contentTypeSlug, wpPostId)
+    );
+    const resData = response.data;
+    return resData?.data || resData;
+  },
+
+  /**
+   * POST {{baseUrl}}/websites/{{websiteId}}/content/{{contentTypeSlug}}/{{wpPostId}}/ingest
+   */
+  async ingestContent(
+    websiteId: string,
+    contentTypeSlug: string,
+    wpPostId: number | string
+  ): Promise<any> {
+    const response = await apiClient.post<any>(
+      API_ENDPOINTS.WEBSITES.INGEST_CONTENT(websiteId, contentTypeSlug, wpPostId)
+    );
+    return response.data;
   },
 };

@@ -1,19 +1,36 @@
-import React, { createContext, useContext, useState, useMemo } from 'react';
+import React, { createContext, useContext, useState, useMemo, useEffect } from 'react';
 import type { Article } from '../types/article';
-import { mockArticles } from '../data/mockArticles';
 import { useApp } from './AppContext';
+import { websitesService } from '../api/services/websites.service';
 
 interface ArticleFilters {
-  websiteId: string;
   postType: string;
   status: string;
   searchQuery: string;
 }
 
+interface PaginationState {
+  page: number;
+  limit: number;
+  totalItems: number;
+  totalPages: number;
+}
+
 interface ArticleContextType {
   articles: Article[];
+  isLoadingArticles: boolean;
+  loadLiveArticles: (
+    overrideWebsiteId?: string,
+    overrideContentType?: string,
+    overrideSearch?: string,
+    overridePage?: number
+  ) => Promise<void>;
+  ingestArticle: (websiteId: string, contentTypeSlug: string, wpPostId: number | string) => Promise<boolean>;
   filters: ArticleFilters;
   setFilters: React.Dispatch<React.SetStateAction<ArticleFilters>>;
+  pagination: PaginationState;
+  setPagination: React.Dispatch<React.SetStateAction<PaginationState>>;
+  goToPage: (page: number) => void;
   filteredArticles: Article[];
   addArticle: (data: Omit<Article, 'id' | 'createdAt' | 'updatedAt'>) => void;
   updateArticle: (id: string, updates: Partial<Article>) => void;
@@ -29,29 +46,181 @@ interface ArticleContextType {
 const ArticleContext = createContext<ArticleContextType | undefined>(undefined);
 
 export const ArticleProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const { addToast, sites } = useApp();
-  const [articles, setArticles] = useState<Article[]>(mockArticles);
+  const { addToast, sites, activeSiteId } = useApp();
+  const [articles, setArticles] = useState<Article[]>([]);
+  const [isLoadingArticles, setIsLoadingArticles] = useState<boolean>(false);
   const [filters, setFilters] = useState<ArticleFilters>({
-    websiteId: 'ALL',
     postType: 'ALL',
     status: 'ALL',
     searchQuery: '',
   });
 
+  const [pagination, setPagination] = useState<PaginationState>({
+    page: 1,
+    limit: 10,
+    totalItems: 0,
+    totalPages: 1,
+  });
+
+  // Load live content from GET /websites/:websiteId/content/:contentTypeSlug?page=xxx&limit=xxx&search=xxx
+  const loadLiveArticles = async (
+    overrideWebsiteId?: string,
+    overrideContentType?: string,
+    overrideSearch?: string,
+    overridePage?: number
+  ) => {
+    // Only use active website from navbar or override
+    const targetSiteId = overrideWebsiteId || activeSiteId || sites[0]?.id;
+
+    if (!targetSiteId) {
+      setArticles([]);
+      setPagination(prev => ({ ...prev, totalItems: 0, totalPages: 1 }));
+      return;
+    }
+
+    const currentSite = sites.find(s => s.id === targetSiteId);
+    const availableTypes = currentSite?.discoveredTypes || [];
+    
+    // Determine post types to fetch
+    let typeSlugsToFetch: string[] = [];
+    const chosenType = overrideContentType !== undefined ? overrideContentType : filters.postType;
+
+    if (chosenType && chosenType !== 'ALL') {
+      typeSlugsToFetch = [chosenType];
+    } else if (availableTypes.length > 0) {
+      typeSlugsToFetch = availableTypes.map(t => t.slug);
+    } else {
+      typeSlugsToFetch = ['post'];
+    }
+
+    const searchParam = overrideSearch !== undefined ? overrideSearch : filters.searchQuery;
+    const targetPage = overridePage !== undefined ? overridePage : pagination.page;
+
+    setIsLoadingArticles(true);
+    try {
+      let aggregatedTotal = 0;
+      let calculatedTotalPages = 1;
+
+      const recordsPerType = await Promise.all(
+        typeSlugsToFetch.map(async slug => {
+          try {
+            const res = await websitesService.getLiveContent(targetSiteId, slug, {
+              page: targetPage,
+              limit: pagination.limit,
+              search: searchParam.trim() || undefined,
+            });
+            const list = res?.data?.data || (Array.isArray(res?.data) ? res.data : []);
+            const paginationMeta = res?.data?.meta?.pagination;
+            if (paginationMeta) {
+              aggregatedTotal += paginationMeta.totalItems || list.length;
+              calculatedTotalPages = Math.max(calculatedTotalPages, paginationMeta.totalPages || 1);
+            } else {
+              aggregatedTotal += list.length;
+            }
+            
+            return list.map((item: any) => ({
+              id: String(item.id),
+              title: item.title?.rendered || item.title || 'Untitled Record',
+              content: item.content?.rendered || item.excerpt?.rendered || item.excerpt || '',
+              excerpt: item.excerpt?.rendered || item.excerpt || '',
+              websiteId: targetSiteId,
+              postType: slug,
+              status: item.status === 'publish' ? 'Published' : (item.status === 'draft' ? 'Draft' : (item.status || 'Draft')),
+              categories: [],
+              tags: [],
+              featuredImage: item.featuredMedia?.sourceUrl || '',
+              wpPostId: typeof item.id === 'number' ? item.id : undefined,
+              liveUrl: item.link || '',
+              hasSnapshot: !!item.hasSnapshot,
+              workflowStatus: item.workflowStatus || null,
+              createdAt: item.date ? item.date.split('T')[0] : new Date().toISOString().split('T')[0],
+              updatedAt: item.modified ? item.modified.split('T')[0] : new Date().toISOString().split('T')[0],
+            }));
+          } catch {
+            return [];
+          }
+        })
+      );
+
+      const flattened = recordsPerType.flat();
+      setArticles(flattened);
+      setPagination(prev => ({
+        ...prev,
+        page: targetPage,
+        totalItems: aggregatedTotal || flattened.length,
+        totalPages: Math.max(1, calculatedTotalPages || Math.ceil(flattened.length / prev.limit)),
+      }));
+    } catch {
+      setArticles([]);
+    } finally {
+      setIsLoadingArticles(false);
+    }
+  };
+
+  const goToPage = (newPage: number) => {
+    if (newPage >= 1 && (pagination.totalPages <= 1 || newPage <= pagination.totalPages)) {
+      setPagination(prev => ({ ...prev, page: newPage }));
+      loadLiveArticles(undefined, undefined, undefined, newPage);
+    }
+  };
+
+  // Ingest content snapshot via POST /websites/:websiteId/content/:contentTypeSlug/:wpPostId/ingest
+  const ingestArticle = async (
+    websiteId: string,
+    contentTypeSlug: string,
+    wpPostId: number | string
+  ): Promise<boolean> => {
+    try {
+      addToast({
+        title: 'Ingesting Content...',
+        message: `Creating workflow snapshot for post #${wpPostId}...`,
+        type: 'info',
+      });
+      await websitesService.ingestContent(websiteId, contentTypeSlug, wpPostId);
+      addToast({
+        title: 'Content Ingested',
+        message: `Post #${wpPostId} has been snapshotted into the pipeline.`,
+        type: 'success',
+      });
+      // Mark as snapshotted locally
+      setArticles(prev =>
+        prev.map(a =>
+          a.websiteId === websiteId && a.wpPostId === wpPostId
+            ? { ...a, hasSnapshot: true }
+            : a
+        )
+      );
+      return true;
+    } catch (err: any) {
+      const errorMsg =
+        err.response?.data?.message || err.message || 'Failed to ingest content snapshot.';
+      addToast({
+        title: 'Ingestion Failed',
+        message: Array.isArray(errorMsg) ? errorMsg.join(', ') : errorMsg,
+        type: 'error',
+      });
+      return false;
+    }
+  };
+
+  // Re-fetch live articles when active website (from navbar) or postType changes
+  useEffect(() => {
+    if (activeSiteId) {
+      loadLiveArticles(activeSiteId, filters.postType, filters.searchQuery, 1);
+    }
+  }, [activeSiteId, filters.postType]);
+
   const filteredArticles = useMemo(() => {
     return articles.filter(art => {
-      if (filters.websiteId !== 'ALL' && art.websiteId !== filters.websiteId) return false;
-      if (filters.postType !== 'ALL' && art.postType !== filters.postType) return false;
-      if (filters.status !== 'ALL' && art.status !== filters.status) return false;
-      if (filters.searchQuery.trim()) {
-        const q = filters.searchQuery.toLowerCase();
-        if (!art.title.toLowerCase().includes(q) && !art.content.toLowerCase().includes(q)) {
+      // Filter by status if specified
+      if (filters.status !== 'ALL') {
+        if (filters.status.toLowerCase() !== art.status.toLowerCase()) {
           return false;
         }
       }
       return true;
     });
-  }, [articles, filters]);
+  }, [articles, filters.status]);
 
   const stats = useMemo(() => {
     return {
@@ -134,8 +303,14 @@ export const ArticleProvider: React.FC<{ children: React.ReactNode }> = ({ child
     <ArticleContext.Provider
       value={{
         articles,
+        isLoadingArticles,
+        loadLiveArticles,
+        ingestArticle,
         filters,
         setFilters,
+        pagination,
+        setPagination,
+        goToPage,
         filteredArticles,
         addArticle,
         updateArticle,

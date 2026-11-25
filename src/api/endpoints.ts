@@ -17,6 +17,12 @@ export const API_ENDPOINTS = {
     CONTENT_TYPES: (websiteId: string) => `/websites/${websiteId}/content-types`,
     CONTENT_TYPE_DETAIL: (websiteId: string, slug: string) =>
       `/websites/${websiteId}/content-types/${slug}`,
+    LIVE_CONTENT: (websiteId: string, contentTypeSlug: string) =>
+      `/websites/${websiteId}/content/${contentTypeSlug}`,
+    LIVE_CONTENT_ITEM: (websiteId: string, contentTypeSlug: string, wpPostId: number | string) =>
+      `/websites/${websiteId}/content/${contentTypeSlug}/${wpPostId}`,
+    INGEST_CONTENT: (websiteId: string, contentTypeSlug: string, wpPostId: number | string) =>
+      `/websites/${websiteId}/content/${contentTypeSlug}/${wpPostId}/ingest`,
   },
   CONTENT_TYPES: {
     DISCOVER: '/content-types/discover',

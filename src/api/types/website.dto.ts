@@ -119,6 +119,60 @@ export interface ContentTypeDetailResponseDto {
   };
 }
 
+export interface LiveContentRecordDto {
+  id: number | string;
+  slug: string;
+  title: string;
+  status: string;
+  date: string;
+  modified?: string;
+  link?: string;
+  excerpt?: string;
+  featuredMedia?: {
+    id: number;
+    sourceUrl: string;
+    altText?: string;
+  } | null;
+  author?: any;
+  hasSnapshot?: boolean;
+  workflowStatus?: string | null;
+  snapshotUpdatedAt?: string | null;
+  [key: string]: any;
+}
+
+export interface LiveContentPaginationMeta {
+  totalItems: number;
+  totalPages: number;
+  currentPage: number;
+  itemsPerPage: number;
+  hasNextPage: boolean;
+  hasPreviousPage: boolean;
+}
+
+export interface LiveContentResponseDto {
+  statusCode?: number;
+  success?: boolean;
+  message?: string;
+  data: {
+    data: LiveContentRecordDto[];
+    meta?: {
+      contentType?: {
+        slug: string;
+        name: string;
+        restNamespace: string;
+        restBase: string;
+      };
+      pagination?: LiveContentPaginationMeta;
+      [key: string]: any;
+    };
+  };
+  meta?: {
+    timestamp?: string;
+    path?: string;
+    [key: string]: any;
+  };
+}
+
 export interface DiscoverContentTypesResultDto {
   siteId?: string;
   discoveredTypes: ContentType[];
