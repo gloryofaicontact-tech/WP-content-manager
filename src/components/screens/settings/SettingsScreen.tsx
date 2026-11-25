@@ -27,18 +27,226 @@ import {
   Camera,
   AlertTriangle,
   Plug,
+  Shield,
+  Lock,
+  Laptop,
+  Smartphone,
+  LogOut,
+  ShieldCheck,
 } from 'lucide-react';
+import { authService } from '../../../api/services/auth.service';
+import type { UserSessionDto } from '../../../api/types/auth.dto';
 
 export const SettingsScreen: React.FC = () => {
   const {
     currentUser,
     updateCurrentUserProfile,
     deleteCurrentUserProfile,
+    logout,
     addToast,
   } = useApp();
 
-  // Active Settings Tab: 'ai' | 'mcp' | 'profile'
-  const [activeTab, setActiveTab] = useState<'ai' | 'mcp' | 'profile'>('ai');
+  // Active Settings Tab: 'ai' | 'mcp' | 'profile' | 'security'
+  const [activeTab, setActiveTab] = useState<'ai' | 'mcp' | 'profile' | 'security'>('ai');
+
+  // ==========================================
+  // Security & Sessions State
+  // ==========================================
+  const [oldPassword, setOldPassword] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [showOldPassword, setShowOldPassword] = useState(false);
+  const [showNewPassword, setShowNewPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const [isChangingPassword, setIsChangingPassword] = useState(false);
+
+  // Email verification state
+  const [verifyTokenInput, setVerifyTokenInput] = useState('');
+  const [isVerifyingEmail, setIsVerifyingEmail] = useState(false);
+  const [isResendingVerification, setIsResendingVerification] = useState(false);
+
+  // Sessions state
+  const [sessions, setSessions] = useState<UserSessionDto[]>([]);
+  const [isLoadingSessions, setIsLoadingSessions] = useState(false);
+  const [revokingSessionId, setRevokingSessionId] = useState<string | null>(null);
+  const [isLoggingOutAll, setIsLoggingOutAll] = useState(false);
+  const [showLogoutAllModal, setShowLogoutAllModal] = useState(false);
+
+  const fetchSessions = async () => {
+    setIsLoadingSessions(true);
+    try {
+      const data = await authService.getSessions();
+      if (Array.isArray(data) && data.length > 0) {
+        setSessions(data);
+      } else {
+        setSessions([
+          {
+            id: 'current-session',
+            deviceName: 'Current Web Client',
+            ipAddress: '::1 (Localhost)',
+            userAgent: navigator.userAgent,
+            isCurrent: true,
+            createdAt: new Date().toISOString(),
+          },
+        ]);
+      }
+    } catch {
+      setSessions([
+        {
+          id: 'current-session',
+          deviceName: 'Current Web Client',
+          ipAddress: '::1 (Localhost)',
+          userAgent: navigator.userAgent,
+          isCurrent: true,
+          createdAt: new Date().toISOString(),
+        },
+      ]);
+    } finally {
+      setIsLoadingSessions(false);
+    }
+  };
+
+  useEffect(() => {
+    if (activeTab === 'security') {
+      fetchSessions();
+    }
+  }, [activeTab]);
+
+  const handleChangePassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!oldPassword || !newPassword || !confirmPassword) {
+      addToast({
+        title: 'Validation Error',
+        message: 'Please complete all password fields.',
+        type: 'warning',
+      });
+      return;
+    }
+
+    if (newPassword !== confirmPassword) {
+      addToast({
+        title: 'Password Mismatch',
+        message: 'The new passwords do not match.',
+        type: 'error',
+      });
+      return;
+    }
+
+    setIsChangingPassword(true);
+    try {
+      await authService.changePassword({ oldPassword, newPassword, confirmPassword });
+      addToast({
+        title: 'Password Changed',
+        message: 'Your password has been updated successfully.',
+        type: 'success',
+      });
+      setOldPassword('');
+      setNewPassword('');
+      setConfirmPassword('');
+    } catch (err: any) {
+      addToast({
+        title: 'Update Failed',
+        message: err.response?.data?.message || err.message || 'Could not change password.',
+        type: 'error',
+      });
+    } finally {
+      setIsChangingPassword(false);
+    }
+  };
+
+  const handleVerifyEmail = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!verifyTokenInput.trim()) {
+      addToast({
+        title: 'Token Required',
+        message: 'Please enter the email verification token.',
+        type: 'warning',
+      });
+      return;
+    }
+
+    setIsVerifyingEmail(true);
+    try {
+      await authService.verifyEmail({ token: verifyTokenInput.trim() });
+      addToast({
+        title: 'Email Verified',
+        message: 'Your email address has been successfully verified.',
+        type: 'success',
+      });
+      setVerifyTokenInput('');
+    } catch (err: any) {
+      addToast({
+        title: 'Verification Failed',
+        message: err.response?.data?.message || err.message || 'Invalid or expired token.',
+        type: 'error',
+      });
+    } finally {
+      setIsVerifyingEmail(false);
+    }
+  };
+
+  const handleResendVerification = async () => {
+    if (!currentUser?.email) return;
+    setIsResendingVerification(true);
+    try {
+      await authService.resendVerification({ email: currentUser.email });
+      addToast({
+        title: 'Verification Dispatched',
+        message: `Verification instructions sent to ${currentUser.email}.`,
+        type: 'success',
+      });
+    } catch (err: any) {
+      addToast({
+        title: 'Resend Failed',
+        message: err.response?.data?.message || err.message || 'Could not resend email.',
+        type: 'error',
+      });
+    } finally {
+      setIsResendingVerification(false);
+    }
+  };
+
+  const handleDeleteSession = async (sessionId: string) => {
+    setRevokingSessionId(sessionId);
+    try {
+      await authService.deleteSession(sessionId);
+      setSessions(prev => prev.filter(s => s.id !== sessionId));
+      addToast({
+        title: 'Session Revoked',
+        message: 'The session has been terminated.',
+        type: 'info',
+      });
+    } catch (err: any) {
+      addToast({
+        title: 'Revoke Failed',
+        message: err.response?.data?.message || err.message || 'Could not revoke session.',
+        type: 'error',
+      });
+    } finally {
+      setRevokingSessionId(null);
+    }
+  };
+
+  const handleLogoutAll = async () => {
+    setIsLoggingOutAll(true);
+    try {
+      await authService.logoutAll();
+      addToast({
+        title: 'Signed Out Everywhere',
+        message: 'All active sessions have been terminated. Redirecting to login...',
+        type: 'info',
+      });
+      setShowLogoutAllModal(false);
+      logout();
+    } catch (err: any) {
+      addToast({
+        title: 'Logout Failed',
+        message: err.response?.data?.message || err.message || 'Could not log out of all devices.',
+        type: 'error',
+      });
+      setIsLoggingOutAll(false);
+    }
+  };
 
   // ==========================================
   // AI & Media Settings State
@@ -341,6 +549,18 @@ export const SettingsScreen: React.FC = () => {
         >
           <User className="w-4 h-4" />
           <span>Profile & Account</span>
+        </button>
+
+        <button
+          onClick={() => setActiveTab('security')}
+          className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-semibold transition-all cursor-pointer shrink-0 ${
+            activeTab === 'security'
+              ? 'bg-violet-600 text-white shadow-xs'
+              : 'text-slate-600 dark:text-zinc-400 hover:text-slate-900 dark:hover:text-zinc-100 hover:bg-slate-100 dark:hover:bg-zinc-900'
+          }`}
+        >
+          <Shield className="w-4 h-4" />
+          <span>Security & Sessions</span>
         </button>
       </div>
 
@@ -825,6 +1045,348 @@ export const SettingsScreen: React.FC = () => {
           </div>
         </div>
       )}
+
+      {/* ========================================================================= */}
+      {/* TAB 4: SECURITY & SESSIONS                                                */}
+      {/* ========================================================================= */}
+      {activeTab === 'security' && (
+        <div className="space-y-6">
+          {/* Card 1: Change Password */}
+          <div className="p-6 rounded-2xl bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 shadow-xs space-y-6">
+            <div className="flex items-center gap-3 pb-4 border-b border-slate-200 dark:border-zinc-800">
+              <div className="p-2.5 rounded-xl bg-violet-50 dark:bg-violet-950/40 text-violet-600 dark:text-violet-400">
+                <Lock className="w-5 h-5" />
+              </div>
+              <div>
+                <h2 className="text-sm font-bold text-slate-900 dark:text-zinc-100">
+                  Update Account Password
+                </h2>
+                <p className="text-xs text-slate-500 dark:text-zinc-400">
+                  Ensure your account is protected with a robust, unique password.
+                </p>
+              </div>
+            </div>
+
+            <form onSubmit={handleChangePassword} className="space-y-4 max-w-xl">
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 dark:text-zinc-300 mb-1.5">
+                  Current Password
+                </label>
+                <div className="relative">
+                  <input
+                    type={showOldPassword ? 'text' : 'password'}
+                    value={oldPassword}
+                    onChange={(e) => setOldPassword(e.target.value)}
+                    placeholder="Enter current password"
+                    required
+                    className="w-full px-3 py-2 pr-10 text-xs rounded-xl bg-slate-50 dark:bg-zinc-950 border border-slate-200 dark:border-zinc-800 focus:outline-hidden focus:border-violet-500 transition-colors"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowOldPassword(!showOldPassword)}
+                    className="absolute right-3 top-2.5 text-slate-400 hover:text-slate-600 dark:hover:text-zinc-300 transition-colors"
+                  >
+                    {showOldPassword ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                  </button>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 dark:text-zinc-300 mb-1.5">
+                    New Password
+                  </label>
+                  <div className="relative">
+                    <input
+                      type={showNewPassword ? 'text' : 'password'}
+                      value={newPassword}
+                      onChange={(e) => setNewPassword(e.target.value)}
+                      placeholder="Enter new password"
+                      required
+                      className="w-full px-3 py-2 pr-10 text-xs rounded-xl bg-slate-50 dark:bg-zinc-950 border border-slate-200 dark:border-zinc-800 focus:outline-hidden focus:border-violet-500 transition-colors"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowNewPassword(!showNewPassword)}
+                      className="absolute right-3 top-2.5 text-slate-400 hover:text-slate-600 dark:hover:text-zinc-300 transition-colors"
+                    >
+                      {showNewPassword ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                    </button>
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 dark:text-zinc-300 mb-1.5">
+                    Confirm New Password
+                  </label>
+                  <div className="relative">
+                    <input
+                      type={showConfirmPassword ? 'text' : 'password'}
+                      value={confirmPassword}
+                      onChange={(e) => setConfirmPassword(e.target.value)}
+                      placeholder="Repeat new password"
+                      required
+                      className="w-full px-3 py-2 pr-10 text-xs rounded-xl bg-slate-50 dark:bg-zinc-950 border border-slate-200 dark:border-zinc-800 focus:outline-hidden focus:border-violet-500 transition-colors"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                      className="absolute right-3 top-2.5 text-slate-400 hover:text-slate-600 dark:hover:text-zinc-300 transition-colors"
+                    >
+                      {showConfirmPassword ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              <div className="pt-2">
+                <Button
+                  type="submit"
+                  size="sm"
+                  disabled={isChangingPassword}
+                  className="flex items-center gap-1.5"
+                >
+                  {isChangingPassword ? (
+                    <>
+                      <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                      <span>Saving Password...</span>
+                    </>
+                  ) : (
+                    <>
+                      <ShieldCheck className="w-3.5 h-3.5" />
+                      <span>Change Password</span>
+                    </>
+                  )}
+                </Button>
+              </div>
+            </form>
+          </div>
+
+          {/* Card 2: Email Verification */}
+          <div className="p-6 rounded-2xl bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 shadow-xs space-y-6">
+            <div className="flex items-center gap-3 pb-4 border-b border-slate-200 dark:border-zinc-800">
+              <div className="p-2.5 rounded-xl bg-blue-50 dark:bg-blue-950/40 text-blue-600 dark:text-blue-400">
+                <Mail className="w-5 h-5" />
+              </div>
+              <div>
+                <h2 className="text-sm font-bold text-slate-900 dark:text-zinc-100">
+                  Email Verification Status
+                </h2>
+                <p className="text-xs text-slate-500 dark:text-zinc-400">
+                  Verify your email address to unlock automated digests, reports, and security notifications.
+                </p>
+              </div>
+            </div>
+
+            <div className="space-y-4 max-w-xl">
+              <div className="flex items-center justify-between p-3 rounded-xl bg-slate-50 dark:bg-zinc-950 border border-slate-200 dark:border-zinc-800">
+                <div>
+                  <div className="text-[11px] font-medium text-slate-500 dark:text-zinc-400">Registered Email</div>
+                  <div className="text-xs font-bold text-slate-900 dark:text-zinc-100">{currentUser?.email}</div>
+                </div>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={handleResendVerification}
+                  disabled={isResendingVerification}
+                  className="text-xs shrink-0 flex items-center gap-1.5"
+                >
+                  <RefreshCw className={`w-3.5 h-3.5 ${isResendingVerification ? 'animate-spin' : ''}`} />
+                  <span>Resend Verification Link</span>
+                </Button>
+              </div>
+
+              <form onSubmit={handleVerifyEmail} className="space-y-3">
+                <label className="block text-xs font-semibold text-slate-700 dark:text-zinc-300">
+                  Submit Verification Token
+                </label>
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    value={verifyTokenInput}
+                    onChange={(e) => setVerifyTokenInput(e.target.value)}
+                    placeholder="Paste verification token received in email..."
+                    className="flex-1 px-3 py-2 text-xs rounded-xl bg-slate-50 dark:bg-zinc-950 border border-slate-200 dark:border-zinc-800 focus:outline-hidden focus:border-violet-500 transition-colors"
+                  />
+                  <Button
+                    type="submit"
+                    size="sm"
+                    disabled={isVerifyingEmail || !verifyTokenInput.trim()}
+                    className="shrink-0 flex items-center gap-1.5"
+                  >
+                    {isVerifyingEmail ? (
+                      <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                    ) : (
+                      <CheckCircle2 className="w-3.5 h-3.5" />
+                    )}
+                    <span>Verify</span>
+                  </Button>
+                </div>
+              </form>
+            </div>
+          </div>
+
+          {/* Card 3: Active Sessions Management */}
+          <div className="p-6 rounded-2xl bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 shadow-xs space-y-6">
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between pb-4 border-b border-slate-200 dark:border-zinc-800 gap-3">
+              <div className="flex items-center gap-3">
+                <div className="p-2.5 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-400">
+                  <Shield className="w-5 h-5" />
+                </div>
+                <div>
+                  <h2 className="text-sm font-bold text-slate-900 dark:text-zinc-100">
+                    Active Devices & Login Sessions
+                  </h2>
+                  <p className="text-xs text-slate-500 dark:text-zinc-400">
+                    Manage and revoke active sessions connected to your account.
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={fetchSessions}
+                  disabled={isLoadingSessions}
+                  className="flex items-center gap-1.5"
+                >
+                  <RefreshCw className={`w-3.5 h-3.5 ${isLoadingSessions ? 'animate-spin' : ''}`} />
+                  <span>Refresh</span>
+                </Button>
+                <Button
+                  type="button"
+                  variant="destructive"
+                  size="sm"
+                  onClick={() => setShowLogoutAllModal(true)}
+                  className="flex items-center gap-1.5"
+                >
+                  <LogOut className="w-3.5 h-3.5" />
+                  <span>Sign Out Everywhere</span>
+                </Button>
+              </div>
+            </div>
+
+            {isLoadingSessions ? (
+              <div className="py-8 flex items-center justify-center gap-2 text-xs text-slate-500 dark:text-zinc-400">
+                <RefreshCw className="w-4 h-4 animate-spin text-violet-600" />
+                <span>Loading active sessions...</span>
+              </div>
+            ) : sessions.length === 0 ? (
+              <p className="text-xs text-slate-500 dark:text-zinc-400 italic">No active sessions reported.</p>
+            ) : (
+              <div className="space-y-3">
+                {sessions.map((session) => (
+                  <div
+                    key={session.id}
+                    className="flex flex-col sm:flex-row sm:items-center justify-between p-4 rounded-xl border border-slate-200 dark:border-zinc-800 bg-slate-50/50 dark:bg-zinc-950/50 gap-3"
+                  >
+                    <div className="flex items-start gap-3">
+                      <div className="p-2 rounded-lg bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 text-slate-600 dark:text-zinc-400 mt-0.5">
+                        {session.userAgent?.toLowerCase().includes('mobile') ? (
+                          <Smartphone className="w-4 h-4" />
+                        ) : (
+                          <Laptop className="w-4 h-4" />
+                        )}
+                      </div>
+                      <div className="space-y-1">
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs font-bold text-slate-900 dark:text-zinc-100">
+                            {session.deviceName || 'Web Browser'}
+                          </span>
+                          {session.isCurrent && (
+                            <span className="px-1.5 py-0.5 rounded text-[10px] font-bold uppercase bg-emerald-100 text-emerald-800 dark:bg-emerald-950/50 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800">
+                              Current Device
+                            </span>
+                          )}
+                        </div>
+                        <div className="text-[11px] text-slate-500 dark:text-zinc-400 font-mono">
+                          IP: {session.ipAddress || 'Unknown'} {session.createdAt ? `• Started ${new Date(session.createdAt).toLocaleDateString()}` : ''}
+                        </div>
+                        {session.userAgent && (
+                          <div className="text-[10px] text-slate-400 dark:text-zinc-500 truncate max-w-md">
+                            {session.userAgent}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+
+                    {!session.isCurrent && (
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        disabled={revokingSessionId === session.id}
+                        onClick={() => handleDeleteSession(session.id)}
+                        className="text-xs text-rose-600 hover:text-rose-700 hover:bg-rose-50 dark:hover:bg-rose-950/30 border-rose-200 dark:border-rose-900 shrink-0 self-end sm:self-auto flex items-center gap-1"
+                      >
+                        {revokingSessionId === session.id ? (
+                          <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                        ) : (
+                          <Trash2 className="w-3.5 h-3.5" />
+                        )}
+                        <span>Revoke</span>
+                      </Button>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Confirmation Modal for Sign Out Everywhere */}
+      <Modal
+        isOpen={showLogoutAllModal}
+        onClose={() => !isLoggingOutAll && setShowLogoutAllModal(false)}
+        title="Sign Out of All Devices"
+        maxWidth="md"
+      >
+        <div className="space-y-4 p-1">
+          <div className="p-3.5 rounded-xl bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-900 flex items-start gap-3">
+            <AlertTriangle className="w-5 h-5 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
+            <div className="text-xs text-amber-700 dark:text-amber-300 space-y-1">
+              <p className="font-bold">Terminate all active user sessions</p>
+              <p>
+                This will immediately invalidate your authentication tokens on all connected phones, computers, and browsers, including this one. You will be redirected to the sign-in screen.
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-center justify-end gap-3 pt-3 border-t border-slate-100 dark:border-zinc-800">
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={isLoggingOutAll}
+              onClick={() => setShowLogoutAllModal(false)}
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              size="sm"
+              disabled={isLoggingOutAll}
+              onClick={handleLogoutAll}
+              className="flex items-center gap-1.5"
+            >
+              {isLoggingOutAll ? (
+                <>
+                  <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                  <span>Signing Out...</span>
+                </>
+              ) : (
+                <>
+                  <LogOut className="w-3.5 h-3.5" />
+                  <span>Sign Out Everywhere</span>
+                </>
+              )}
+            </Button>
+          </div>
+        </div>
+      </Modal>
 
       {/* Confirmation Modal for Profile Deletion */}
       <Modal

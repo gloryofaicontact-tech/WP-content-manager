@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { useApp } from '../../../context/AppContext';
 import { useTheme } from '../../../context/ThemeContext';
 import { Button } from '../../common/Button';
+import { authService } from '../../../api/services/auth.service';
 import {
   Zap,
   Mail,
@@ -11,23 +12,27 @@ import {
   EyeOff,
   Sun,
   Moon,
+  Key,
+  ArrowLeft,
+  ShieldCheck,
 } from 'lucide-react';
+
+type AuthScreenMode = 'login' | 'register' | 'forgot-password' | 'reset-password' | 'verify-email';
 
 export const AuthScreen: React.FC = () => {
   const { authMode, setAuthMode, login, register, addToast } = useApp();
   const { theme, toggleTheme } = useTheme();
 
+  const [mode, setMode] = useState<AuthScreenMode>(authMode);
+
   // Storage key for remember me
   const REMEMBER_ME_KEY = 'wp_remembered_credentials';
 
-  // Login form state (pre-fill if saved)
+  // Login form state
   const [loginEmail, setLoginEmail] = useState(() => {
     try {
       const saved = localStorage.getItem(REMEMBER_ME_KEY);
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        return parsed.email || '';
-      }
+      if (saved) return JSON.parse(saved).email || '';
     } catch {
       // ignore
     }
@@ -36,10 +41,7 @@ export const AuthScreen: React.FC = () => {
   const [loginPassword, setLoginPassword] = useState(() => {
     try {
       const saved = localStorage.getItem(REMEMBER_ME_KEY);
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        return parsed.password || '';
-      }
+      if (saved) return JSON.parse(saved).password || '';
     } catch {
       // ignore
     }
@@ -62,13 +64,27 @@ export const AuthScreen: React.FC = () => {
   const [showRegPassword, setShowRegPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
 
+  // Forgot password form state
+  const [forgotEmail, setForgotEmail] = useState('');
+
+  // Reset password form state
+  const [resetToken, setResetToken] = useState('');
+  const [resetNewPassword, setResetNewPassword] = useState('');
+  const [resetConfirmPassword, setResetConfirmPassword] = useState('');
+  const [showResetPassword, setShowResetPassword] = useState(false);
+
+  // Email verification form state
+  const [verifyToken, setVerifyToken] = useState('');
+  const [resendEmail, setResendEmail] = useState('');
+
   const [isLoading, setIsLoading] = useState(false);
 
+  // Handle Login Submit
   const handleLoginSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!loginEmail.trim() || !loginPassword.trim()) {
       addToast({
-        title: 'Error',
+        title: 'Validation Error',
         message: 'Please enter both email and password.',
         type: 'warning',
       });
@@ -92,18 +108,19 @@ export const AuthScreen: React.FC = () => {
         deviceName: 'Postman Desktop Client',
       });
     } catch {
-      // Error toast is already displayed inside AppContext login handler
+      // Error handled in AppContext
     } finally {
       setIsLoading(false);
     }
   };
 
+  // Handle Register Submit
   const handleRegisterSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!fullName.trim() || !regEmail.trim() || !regPassword.trim() || !confirmPassword.trim()) {
       addToast({
-        title: 'Error',
-        message: 'Please fill in all fields.',
+        title: 'Validation Error',
+        message: 'Please fill in all required fields.',
         type: 'warning',
       });
       return;
@@ -111,7 +128,7 @@ export const AuthScreen: React.FC = () => {
 
     if (regPassword !== confirmPassword) {
       addToast({
-        title: 'Error',
+        title: 'Password Mismatch',
         message: 'Passwords do not match.',
         type: 'error',
       });
@@ -124,10 +141,153 @@ export const AuthScreen: React.FC = () => {
         fullName: fullName.trim(),
         email: regEmail.trim(),
         password: regPassword,
-        confirmPassword: confirmPassword,
+        confirmPassword,
       });
     } catch {
-      // Error toast is already displayed inside AppContext register handler
+      // Error handled in AppContext
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // Handle Forgot Password Submit: POST /auth/forgot-password
+  const handleForgotPasswordSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!forgotEmail.trim()) {
+      addToast({
+        title: 'Email Required',
+        message: 'Please enter your registered email address.',
+        type: 'warning',
+      });
+      return;
+    }
+
+    setIsLoading(true);
+    try {
+      const res = await authService.forgotPassword({ email: forgotEmail.trim() });
+      addToast({
+        title: 'Reset Link Sent',
+        message: res?.message || `Password reset instructions have been dispatched to ${forgotEmail}.`,
+        type: 'success',
+      });
+      // Optionally transition to reset token entry
+      setMode('reset-password');
+    } catch (err: any) {
+      addToast({
+        title: 'Request Failed',
+        message: err.response?.data?.message || err.message || 'Could not process password reset.',
+        type: 'error',
+      });
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // Handle Reset Password Submit: POST /auth/reset-password
+  const handleResetPasswordSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!resetToken.trim() || !resetNewPassword || !resetConfirmPassword) {
+      addToast({
+        title: 'Missing Fields',
+        message: 'Please provide the token and your new password.',
+        type: 'warning',
+      });
+      return;
+    }
+
+    if (resetNewPassword !== resetConfirmPassword) {
+      addToast({
+        title: 'Password Mismatch',
+        message: 'The new passwords do not match.',
+        type: 'error',
+      });
+      return;
+    }
+
+    setIsLoading(true);
+    try {
+      const res = await authService.resetPassword({
+        token: resetToken.trim(),
+        newPassword: resetNewPassword,
+        confirmPassword: resetConfirmPassword,
+      });
+      addToast({
+        title: 'Password Reset Successful',
+        message: res?.message || 'Your password has been reset. You can now log in.',
+        type: 'success',
+      });
+      setLoginPassword('');
+      setMode('login');
+      setAuthMode('login');
+    } catch (err: any) {
+      addToast({
+        title: 'Reset Failed',
+        message: err.response?.data?.message || err.message || 'Invalid or expired reset token.',
+        type: 'error',
+      });
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // Handle Verify Email Submit: POST /auth/verify-email
+  const handleVerifyEmailSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!verifyToken.trim()) {
+      addToast({
+        title: 'Token Required',
+        message: 'Please enter the verification token received in your email.',
+        type: 'warning',
+      });
+      return;
+    }
+
+    setIsLoading(true);
+    try {
+      const res = await authService.verifyEmail({ token: verifyToken.trim() });
+      addToast({
+        title: 'Email Verified',
+        message: res?.message || 'Your email has been verified successfully.',
+        type: 'success',
+      });
+      setMode('login');
+    } catch (err: any) {
+      addToast({
+        title: 'Verification Failed',
+        message: err.response?.data?.message || err.message || 'Invalid or expired verification token.',
+        type: 'error',
+      });
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // Handle Resend Verification Submit: POST /auth/resend-verification
+  const handleResendVerification = async () => {
+    const targetEmail = resendEmail.trim() || loginEmail.trim() || forgotEmail.trim();
+    if (!targetEmail) {
+      addToast({
+        title: 'Email Required',
+        message: 'Please enter the email address to resend verification to.',
+        type: 'warning',
+      });
+      return;
+    }
+
+    setIsLoading(true);
+    try {
+      const res = await authService.resendVerification({ email: targetEmail });
+      addToast({
+        title: 'Verification Resent',
+        message: res?.message || `Verification link sent to ${targetEmail}.`,
+        type: 'success',
+      });
+    } catch (err: any) {
+      addToast({
+        title: 'Resend Failed',
+        message: err.response?.data?.message || err.message || 'Could not resend verification email.',
+        type: 'error',
+      });
     } finally {
       setIsLoading(false);
     }
@@ -139,58 +299,76 @@ export const AuthScreen: React.FC = () => {
       <div className="absolute top-5 right-5">
         <button
           onClick={toggleTheme}
-          className="p-2 rounded-xl bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 text-slate-600 dark:text-zinc-300 hover:text-slate-900 dark:hover:text-white shadow-xs transition-colors cursor-pointer"
-          title={theme === 'dark' ? 'Light Mode' : 'Dark Mode'}
+          className="p-2.5 rounded-xl border border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 text-slate-600 dark:text-zinc-300 hover:bg-slate-100 dark:hover:bg-zinc-800 transition-colors shadow-xs cursor-pointer"
+          title={theme === 'dark' ? 'Switch to Light Mode' : 'Switch to Dark Mode'}
         >
-          {theme === 'dark' ? <Sun className="w-4 h-4 text-amber-400" /> : <Moon className="w-4 h-4 text-violet-600" />}
+          {theme === 'dark' ? (
+            <Sun className="w-4 h-4 text-amber-400" />
+          ) : (
+            <Moon className="w-4 h-4 text-violet-600" />
+          )}
         </button>
       </div>
 
-      {/* Main Centered Card */}
+      {/* Main Auth Card */}
       <div className="w-full max-w-md bg-white dark:bg-zinc-900 rounded-3xl border border-slate-200 dark:border-zinc-800 shadow-xl shadow-slate-200/50 dark:shadow-black/50 p-7 sm:p-8 animate-slide-fade">
         {/* Brand Header */}
         <div className="text-center mb-6">
-          <div className="w-11 h-11 rounded-2xl bg-violet-600 mx-auto flex items-center justify-center text-white shadow-md shadow-violet-500/20 mb-3">
+          <div className="w-11 h-11 rounded-2xl bg-gradient-to-tr from-violet-600 to-indigo-600 mx-auto flex items-center justify-center text-white shadow-md shadow-violet-500/25 mb-3">
             <Zap className="w-5 h-5 fill-white" />
           </div>
           <h2 className="text-xl font-bold tracking-tight text-slate-900 dark:text-zinc-100">
-            {authMode === 'login' ? 'Sign in to your account' : 'Create an account'}
+            {mode === 'login' && 'Sign in to your account'}
+            {mode === 'register' && 'Create an account'}
+            {mode === 'forgot-password' && 'Reset your password'}
+            {mode === 'reset-password' && 'Enter new password'}
+            {mode === 'verify-email' && 'Verify your email'}
           </h2>
           <p className="text-xs text-slate-500 dark:text-zinc-400 mt-1">
-            {authMode === 'login'
-              ? 'Enter your email and password to continue'
-              : 'Enter your details below to get started'}
+            {mode === 'login' && 'Enter your credentials to manage WordPress sites'}
+            {mode === 'register' && 'Register your publisher profile to get started'}
+            {mode === 'forgot-password' && 'Enter your registered email to receive a reset token'}
+            {mode === 'reset-password' && 'Paste your reset token and set a secure password'}
+            {mode === 'verify-email' && 'Enter the token sent to your email address'}
           </p>
         </div>
 
-        {/* Tab Switcher */}
-        <div className="flex p-1 rounded-xl bg-slate-100 dark:bg-zinc-800 border border-slate-200 dark:border-zinc-700/60 mb-6">
-          <button
-            type="button"
-            onClick={() => setAuthMode('login')}
-            className={`flex-1 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
-              authMode === 'login'
-                ? 'bg-white dark:bg-zinc-900 text-slate-900 dark:text-white shadow-xs'
-                : 'text-slate-500 dark:text-zinc-400 hover:text-slate-800'
-            }`}
-          >
-            Sign In
-          </button>
-          <button
-            type="button"
-            onClick={() => setAuthMode('register')}
-            className={`flex-1 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
-              authMode === 'register'
-                ? 'bg-white dark:bg-zinc-900 text-slate-900 dark:text-white shadow-xs'
-                : 'text-slate-500 dark:text-zinc-400 hover:text-slate-800'
-            }`}
-          >
-            Register
-          </button>
-        </div>
+        {/* Tab Switcher for Login / Register */}
+        {(mode === 'login' || mode === 'register') && (
+          <div className="flex p-1 rounded-xl bg-slate-100 dark:bg-zinc-800 border border-slate-200 dark:border-zinc-700/60 mb-6">
+            <button
+              type="button"
+              onClick={() => {
+                setMode('login');
+                setAuthMode('login');
+              }}
+              className={`flex-1 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
+                mode === 'login'
+                  ? 'bg-white dark:bg-zinc-900 text-slate-900 dark:text-white shadow-xs'
+                  : 'text-slate-500 dark:text-zinc-400 hover:text-slate-800'
+              }`}
+            >
+              Sign In
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setMode('register');
+                setAuthMode('register');
+              }}
+              className={`flex-1 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
+                mode === 'register'
+                  ? 'bg-white dark:bg-zinc-900 text-slate-900 dark:text-white shadow-xs'
+                  : 'text-slate-500 dark:text-zinc-400 hover:text-slate-800'
+              }`}
+            >
+              Register
+            </button>
+          </div>
+        )}
 
-        {/* ---------------- LOGIN FORM ---------------- */}
-        {authMode === 'login' ? (
+        {/* ---------------- 1. LOGIN FORM ---------------- */}
+        {mode === 'login' && (
           <form onSubmit={handleLoginSubmit} className="space-y-4">
             <div>
               <label className="text-xs font-semibold text-slate-700 dark:text-zinc-300 block mb-1">
@@ -218,7 +396,7 @@ export const AuthScreen: React.FC = () => {
                 <input
                   type={showLoginPassword ? 'text' : 'password'}
                   required
-                  placeholder="SecurePass123!"
+                  placeholder="••••••••••••"
                   value={loginPassword}
                   onChange={e => setLoginPassword(e.target.value)}
                   className="w-full bg-slate-50 dark:bg-zinc-950 border border-slate-200 dark:border-zinc-800 text-xs text-slate-900 dark:text-zinc-100 rounded-xl pl-9 pr-9 py-2.5 focus:border-violet-500 focus:bg-white dark:focus:bg-zinc-900 focus:outline-none transition-all"
@@ -233,7 +411,7 @@ export const AuthScreen: React.FC = () => {
               </div>
             </div>
 
-            {/* Remember Me Checkbox */}
+            {/* Remember Me Checkbox & Forgot Password */}
             <div className="flex items-center justify-between pt-0.5">
               <label className="flex items-center gap-2 cursor-pointer select-none">
                 <input
@@ -246,6 +424,14 @@ export const AuthScreen: React.FC = () => {
                   Remember credentials
                 </span>
               </label>
+
+              <button
+                type="button"
+                onClick={() => setMode('forgot-password')}
+                className="text-xs font-semibold text-violet-600 dark:text-violet-400 hover:underline cursor-pointer"
+              >
+                Forgot password?
+              </button>
             </div>
 
             <Button
@@ -258,8 +444,10 @@ export const AuthScreen: React.FC = () => {
               Sign In
             </Button>
           </form>
-        ) : (
-          /* ---------------- REGISTER FORM ---------------- */
+        )}
+
+        {/* ---------------- 2. REGISTER FORM ---------------- */}
+        {mode === 'register' && (
           <form onSubmit={handleRegisterSubmit} className="space-y-3.5">
             <div>
               <label className="text-xs font-semibold text-slate-700 dark:text-zinc-300 block mb-1">
@@ -270,7 +458,7 @@ export const AuthScreen: React.FC = () => {
                 <input
                   type="text"
                   required
-                  placeholder="John Editor"
+                  placeholder="Super Admin User"
                   value={fullName}
                   onChange={e => setFullName(e.target.value)}
                   className="w-full bg-slate-50 dark:bg-zinc-950 border border-slate-200 dark:border-zinc-800 text-xs text-slate-900 dark:text-zinc-100 rounded-xl pl-9 pr-3 py-2.5 focus:border-violet-500 focus:bg-white dark:focus:bg-zinc-900 focus:outline-none transition-all"
@@ -287,7 +475,7 @@ export const AuthScreen: React.FC = () => {
                 <input
                   type="email"
                   required
-                  placeholder="editor@example.com"
+                  placeholder="admin@example.com"
                   value={regEmail}
                   onChange={e => setRegEmail(e.target.value)}
                   className="w-full bg-slate-50 dark:bg-zinc-950 border border-slate-200 dark:border-zinc-800 text-xs text-slate-900 dark:text-zinc-100 rounded-xl pl-9 pr-3 py-2.5 focus:border-violet-500 focus:bg-white dark:focus:bg-zinc-900 focus:outline-none transition-all"
@@ -304,7 +492,7 @@ export const AuthScreen: React.FC = () => {
                 <input
                   type={showRegPassword ? 'text' : 'password'}
                   required
-                  placeholder="SecurePass123!"
+                  placeholder="SecurePassword123!"
                   value={regPassword}
                   onChange={e => setRegPassword(e.target.value)}
                   className="w-full bg-slate-50 dark:bg-zinc-950 border border-slate-200 dark:border-zinc-800 text-xs text-slate-900 dark:text-zinc-100 rounded-xl pl-9 pr-9 py-2.5 focus:border-violet-500 focus:bg-white dark:focus:bg-zinc-900 focus:outline-none transition-all"
@@ -328,7 +516,7 @@ export const AuthScreen: React.FC = () => {
                 <input
                   type={showConfirmPassword ? 'text' : 'password'}
                   required
-                  placeholder="SecurePass123!"
+                  placeholder="Confirm password"
                   value={confirmPassword}
                   onChange={e => setConfirmPassword(e.target.value)}
                   className="w-full bg-slate-50 dark:bg-zinc-950 border border-slate-200 dark:border-zinc-800 text-xs text-slate-900 dark:text-zinc-100 rounded-xl pl-9 pr-9 py-2.5 focus:border-violet-500 focus:bg-white dark:focus:bg-zinc-900 focus:outline-none transition-all"
@@ -355,32 +543,248 @@ export const AuthScreen: React.FC = () => {
           </form>
         )}
 
-        {/* Bottom Switch Link */}
-        <div className="text-center mt-5 pt-4 border-t border-slate-100 dark:border-zinc-800/80">
-          {authMode === 'login' ? (
-            <p className="text-xs text-slate-500 dark:text-zinc-400">
-              Don't have an account?{' '}
+        {/* ---------------- 3. FORGOT PASSWORD FORM ---------------- */}
+        {mode === 'forgot-password' && (
+          <form onSubmit={handleForgotPasswordSubmit} className="space-y-4">
+            <div>
+              <label className="text-xs font-semibold text-slate-700 dark:text-zinc-300 block mb-1">
+                Registered Email Address
+              </label>
+              <div className="relative flex items-center">
+                <Mail className="w-4 h-4 text-slate-400 dark:text-zinc-500 absolute left-3 pointer-events-none" />
+                <input
+                  type="email"
+                  required
+                  placeholder="superadmin@gmail.com"
+                  value={forgotEmail}
+                  onChange={e => setForgotEmail(e.target.value)}
+                  className="w-full bg-slate-50 dark:bg-zinc-950 border border-slate-200 dark:border-zinc-800 text-xs text-slate-900 dark:text-zinc-100 rounded-xl pl-9 pr-3 py-2.5 focus:border-violet-500 focus:bg-white dark:focus:bg-zinc-900 focus:outline-none transition-all"
+                />
+              </div>
+            </div>
+
+            <Button
+              type="submit"
+              variant="glow"
+              size="md"
+              isLoading={isLoading}
+              className="w-full font-bold shadow-md shadow-violet-500/20"
+            >
+              Send Reset Token
+            </Button>
+
+            <div className="flex items-center justify-between text-xs pt-2">
               <button
                 type="button"
-                onClick={() => setAuthMode('register')}
-                className="text-violet-600 dark:text-violet-400 font-semibold hover:underline cursor-pointer"
+                onClick={() => setMode('login')}
+                className="inline-flex items-center gap-1 text-slate-500 dark:text-zinc-400 hover:text-slate-800 dark:hover:text-zinc-200 font-semibold cursor-pointer"
               >
-                Sign up
+                <ArrowLeft className="w-3.5 h-3.5" />
+                <span>Back to Sign In</span>
               </button>
-            </p>
-          ) : (
-            <p className="text-xs text-slate-500 dark:text-zinc-400">
-              Already have an account?{' '}
+
               <button
                 type="button"
-                onClick={() => setAuthMode('login')}
+                onClick={() => setMode('reset-password')}
                 className="text-violet-600 dark:text-violet-400 font-semibold hover:underline cursor-pointer"
               >
-                Sign in
+                Already have token?
               </button>
-            </p>
-          )}
-        </div>
+            </div>
+          </form>
+        )}
+
+        {/* ---------------- 4. RESET PASSWORD FORM ---------------- */}
+        {mode === 'reset-password' && (
+          <form onSubmit={handleResetPasswordSubmit} className="space-y-3.5">
+            <div>
+              <label className="text-xs font-semibold text-slate-700 dark:text-zinc-300 block mb-1">
+                Reset Token
+              </label>
+              <div className="relative flex items-center">
+                <Key className="w-4 h-4 text-slate-400 dark:text-zinc-500 absolute left-3 pointer-events-none" />
+                <input
+                  type="text"
+                  required
+                  placeholder="RAW_TOKEN_FROM_EMAIL"
+                  value={resetToken}
+                  onChange={e => setResetToken(e.target.value)}
+                  className="w-full bg-slate-50 dark:bg-zinc-950 border border-slate-200 dark:border-zinc-800 text-xs text-slate-900 dark:text-zinc-100 rounded-xl pl-9 pr-3 py-2.5 focus:border-violet-500 focus:bg-white dark:focus:bg-zinc-900 focus:outline-none font-mono"
+                />
+              </div>
+            </div>
+
+            <div>
+              <label className="text-xs font-semibold text-slate-700 dark:text-zinc-300 block mb-1">
+                New Password
+              </label>
+              <div className="relative flex items-center">
+                <Lock className="w-4 h-4 text-slate-400 dark:text-zinc-500 absolute left-3 pointer-events-none" />
+                <input
+                  type={showResetPassword ? 'text' : 'password'}
+                  required
+                  placeholder="NewPassword123!"
+                  value={resetNewPassword}
+                  onChange={e => setResetNewPassword(e.target.value)}
+                  className="w-full bg-slate-50 dark:bg-zinc-950 border border-slate-200 dark:border-zinc-800 text-xs text-slate-900 dark:text-zinc-100 rounded-xl pl-9 pr-9 py-2.5 focus:border-violet-500 focus:bg-white dark:focus:bg-zinc-900 focus:outline-none transition-all"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowResetPassword(!showResetPassword)}
+                  className="p-1.5 text-slate-400 hover:text-slate-600 dark:text-zinc-500 absolute right-2.5 cursor-pointer"
+                >
+                  {showResetPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                </button>
+              </div>
+            </div>
+
+            <div>
+              <label className="text-xs font-semibold text-slate-700 dark:text-zinc-300 block mb-1">
+                Confirm New Password
+              </label>
+              <div className="relative flex items-center">
+                <Lock className="w-4 h-4 text-slate-400 dark:text-zinc-500 absolute left-3 pointer-events-none" />
+                <input
+                  type="password"
+                  required
+                  placeholder="Confirm new password"
+                  value={resetConfirmPassword}
+                  onChange={e => setResetConfirmPassword(e.target.value)}
+                  className="w-full bg-slate-50 dark:bg-zinc-950 border border-slate-200 dark:border-zinc-800 text-xs text-slate-900 dark:text-zinc-100 rounded-xl pl-9 pr-3 py-2.5 focus:border-violet-500 focus:bg-white dark:focus:bg-zinc-900 focus:outline-none transition-all"
+                />
+              </div>
+            </div>
+
+            <Button
+              type="submit"
+              variant="glow"
+              size="md"
+              isLoading={isLoading}
+              className="w-full font-bold shadow-md shadow-violet-500/20"
+            >
+              Reset Password
+            </Button>
+
+            <div className="text-center pt-2">
+              <button
+                type="button"
+                onClick={() => setMode('login')}
+                className="text-xs font-semibold text-slate-500 hover:text-slate-800 dark:text-zinc-400 hover:underline cursor-pointer"
+              >
+                ← Back to Sign In
+              </button>
+            </div>
+          </form>
+        )}
+
+        {/* ---------------- 5. VERIFY EMAIL FORM ---------------- */}
+        {mode === 'verify-email' && (
+          <form onSubmit={handleVerifyEmailSubmit} className="space-y-4">
+            <div>
+              <label className="text-xs font-semibold text-slate-700 dark:text-zinc-300 block mb-1">
+                Verification Token
+              </label>
+              <div className="relative flex items-center">
+                <ShieldCheck className="w-4 h-4 text-slate-400 dark:text-zinc-500 absolute left-3 pointer-events-none" />
+                <input
+                  type="text"
+                  required
+                  placeholder="RAW_TOKEN_FROM_EMAIL"
+                  value={verifyToken}
+                  onChange={e => setVerifyToken(e.target.value)}
+                  className="w-full bg-slate-50 dark:bg-zinc-950 border border-slate-200 dark:border-zinc-800 text-xs text-slate-900 dark:text-zinc-100 rounded-xl pl-9 pr-3 py-2.5 focus:border-violet-500 focus:bg-white dark:focus:bg-zinc-900 focus:outline-none font-mono"
+                />
+              </div>
+            </div>
+
+            <Button
+              type="submit"
+              variant="glow"
+              size="md"
+              isLoading={isLoading}
+              className="w-full font-bold shadow-md shadow-violet-500/20"
+            >
+              Verify Email Address
+            </Button>
+
+            <div className="pt-3 border-t border-slate-100 dark:border-zinc-800/80 space-y-2">
+              <label className="text-[11px] font-semibold text-slate-600 dark:text-zinc-400 block">
+                Did not receive email? Resend verification:
+              </label>
+              <div className="flex gap-2">
+                <input
+                  type="email"
+                  placeholder="editor@example.com"
+                  value={resendEmail}
+                  onChange={e => setResendEmail(e.target.value)}
+                  className="flex-1 bg-slate-50 dark:bg-zinc-950 border border-slate-200 dark:border-zinc-800 text-xs rounded-xl px-3 py-1.5 focus:border-violet-500 outline-none"
+                />
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="xs"
+                  onClick={handleResendVerification}
+                  disabled={isLoading}
+                >
+                  Resend
+                </Button>
+              </div>
+            </div>
+
+            <div className="text-center pt-2">
+              <button
+                type="button"
+                onClick={() => setMode('login')}
+                className="text-xs font-semibold text-slate-500 hover:text-slate-800 dark:text-zinc-400 hover:underline cursor-pointer"
+              >
+                ← Back to Sign In
+              </button>
+            </div>
+          </form>
+        )}
+
+        {/* Bottom Switch Links (For Login / Register) */}
+        {(mode === 'login' || mode === 'register') && (
+          <div className="text-center mt-5 pt-4 border-t border-slate-100 dark:border-zinc-800/80 space-y-2">
+            {mode === 'login' ? (
+              <p className="text-xs text-slate-500 dark:text-zinc-400">
+                Don't have an account?{' '}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setMode('register');
+                    setAuthMode('register');
+                  }}
+                  className="text-violet-600 dark:text-violet-400 font-semibold hover:underline cursor-pointer"
+                >
+                  Sign up
+                </button>
+              </p>
+            ) : (
+              <p className="text-xs text-slate-500 dark:text-zinc-400">
+                Already have an account?{' '}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setMode('login');
+                    setAuthMode('login');
+                  }}
+                  className="text-violet-600 dark:text-violet-400 font-semibold hover:underline cursor-pointer"
+                >
+                  Sign in
+                </button>
+              </p>
+            )}
+
+            <button
+              type="button"
+              onClick={() => setMode('verify-email')}
+              className="text-[11px] text-slate-400 hover:text-slate-600 dark:hover:text-zinc-300 font-medium cursor-pointer block mx-auto"
+            >
+              Verify email with token →
+            </button>
+          </div>
+        )}
       </div>
     </div>
   );

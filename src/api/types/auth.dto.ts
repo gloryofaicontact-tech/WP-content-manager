@@ -31,6 +31,42 @@ export interface UpdateUserProfileDto {
   profileImage?: string;
 }
 
+export interface ForgotPasswordDto {
+  email: string;
+}
+
+export interface ResetPasswordDto {
+  token: string;
+  newPassword: string;
+  confirmPassword: string;
+}
+
+export interface ChangePasswordDto {
+  oldPassword: string;
+  newPassword: string;
+  confirmPassword: string;
+}
+
+export interface VerifyEmailDto {
+  token: string;
+}
+
+export interface ResendVerificationDto {
+  email: string;
+}
+
+export interface UserSessionDto {
+  id: string;
+  userId?: string;
+  deviceName?: string;
+  ipAddress?: string;
+  userAgent?: string;
+  isCurrent?: boolean;
+  createdAt: string;
+  lastActiveAt?: string;
+  expiresAt?: string;
+}
+
 export interface AuthResponseDto {
   accessToken?: string;
   access_token?: string;
