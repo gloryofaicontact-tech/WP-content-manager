@@ -126,15 +126,27 @@ export const TopNavbar: React.FC = () => {
 
         {/* User Profile Avatar & Info */}
         <div className="flex items-center gap-2 pl-2 border-l border-slate-200 dark:border-zinc-800">
-          <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-violet-600 to-indigo-600 flex items-center justify-center font-bold text-xs text-white shadow-xs">
-            {currentUser?.fullName
-              ? currentUser.fullName
-                  .split(' ')
-                  .map(n => n[0])
-                  .join('')
-                  .toUpperCase()
-              : 'JE'}
-          </div>
+          {currentUser?.profileImage ? (
+            <img
+              src={currentUser.profileImage}
+              alt={currentUser.fullName || 'User Avatar'}
+              className="w-8 h-8 rounded-full object-cover shadow-xs border border-slate-200 dark:border-zinc-700"
+              onError={e => {
+                // If image fails to load, hide image element so fallback can show or set display none
+                (e.target as HTMLElement).style.display = 'none';
+              }}
+            />
+          ) : (
+            <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-violet-600 to-indigo-600 flex items-center justify-center font-bold text-xs text-white shadow-xs">
+              {currentUser?.fullName
+                ? currentUser.fullName
+                    .split(' ')
+                    .map(n => n[0])
+                    .join('')
+                    .toUpperCase()
+                : 'JE'}
+            </div>
+          )}
           <div className="hidden lg:block text-left">
             <span className="text-xs font-bold text-slate-800 dark:text-zinc-200 block leading-tight">
               {currentUser?.fullName || 'John Editor'}

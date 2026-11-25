@@ -44,8 +44,14 @@ export const API_ENDPOINTS = {
   },
   USERS: {
     PROFILE: '/users/profile',
+    PROFILE_UPDATE: '/users/profile-update',
+    PROFILE_DELETE: '/users/profile-delete',
     TEAM: '/users/team',
     INVITE: '/users/team/invite',
     REMOVE: (id: string) => `/users/team/${id}`,
+  },
+  SETTINGS: {
+    AI: '/settings/ai',
+    TEST_AI: '/settings/ai/test',
   },
 } as const;

@@ -20,9 +20,15 @@ export interface UserProfileDto {
   email: string;
   fullName?: string;
   name?: string;
+  profileImage?: string;
   role?: 'Admin' | 'Editor' | 'Author' | string;
   createdAt?: string;
   updatedAt?: string;
+}
+
+export interface UpdateUserProfileDto {
+  fullName?: string;
+  profileImage?: string;
 }
 
 export interface AuthResponseDto {

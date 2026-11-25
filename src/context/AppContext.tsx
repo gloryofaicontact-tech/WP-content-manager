@@ -3,6 +3,8 @@ import type { WordPressSite } from '../types/wordpress';
 import { mockDefaultContentTypes } from '../data/mockSites';
 import { authService } from '../api/services/auth.service';
 import { websitesService } from '../api/services/websites.service';
+import { usersService } from '../api/services/users.service';
+import { USER_STORAGE_KEY } from '../api/client';
 import type { LoginDto, RegisterDto } from '../api/types/auth.dto';
 import type {
   CreateWebsiteDto,
@@ -24,6 +26,7 @@ export interface UserProfile {
   fullName: string;
   email: string;
   role: string;
+  profileImage?: string;
 }
 
 interface AppContextType {
@@ -39,6 +42,8 @@ interface AppContextType {
   login: (data: LoginDto) => Promise<boolean>;
   register: (data: RegisterDto) => Promise<boolean>;
   logout: () => void;
+  updateCurrentUserProfile: (data: { fullName?: string; profileImage?: string }) => Promise<void>;
+  deleteCurrentUserProfile: () => Promise<void>;
 
   // Websites
   activeSiteId: string;
@@ -80,6 +85,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         fullName: cached.fullName || cached.name || 'User',
         email: cached.email,
         role: cached.role || 'Editor',
+        profileImage: cached.profileImage || (cached as any).avatar || '',
       };
     }
     return null;
@@ -98,6 +104,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
               fullName: profile.fullName || profile.name || 'User',
               email: profile.email,
               role: profile.role || 'Editor',
+              profileImage: profile.profileImage || (profile as any).avatar || '',
             });
             setIsAuthenticated(true);
           }
@@ -317,6 +324,39 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     addToast({
       title: 'Logged Out',
       message: 'You have been safely signed out.',
+      type: 'info',
+    });
+  };
+
+  const updateCurrentUserProfile = async (data: { fullName?: string; profileImage?: string }) => {
+    const updated = await usersService.updateProfile(data);
+    const newFullName = data.fullName || updated?.fullName || updated?.name || currentUser?.fullName || 'User';
+    const newProfileImage = data.profileImage !== undefined ? data.profileImage : (updated?.profileImage || currentUser?.profileImage || '');
+
+    const nextUser: UserProfile = {
+      id: currentUser?.id || updated?.id,
+      email: currentUser?.email || updated?.email || '',
+      role: currentUser?.role || updated?.role || 'Editor',
+      fullName: newFullName,
+      profileImage: newProfileImage,
+    };
+
+    setCurrentUser(nextUser);
+    localStorage.setItem(USER_STORAGE_KEY, JSON.stringify(nextUser));
+
+    addToast({
+      title: 'Profile Updated',
+      message: 'Your profile has been saved successfully.',
+      type: 'success',
+    });
+  };
+
+  const deleteCurrentUserProfile = async () => {
+    await usersService.deleteProfile();
+    logout();
+    addToast({
+      title: 'Account Deleted',
+      message: 'Your profile has been permanently removed.',
       type: 'info',
     });
   };
@@ -548,6 +588,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         login,
         register,
         logout,
+        updateCurrentUserProfile,
+        deleteCurrentUserProfile,
         activeSiteId,
         setActiveSiteId,
         sites,

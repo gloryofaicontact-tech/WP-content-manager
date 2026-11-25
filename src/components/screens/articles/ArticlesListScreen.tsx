@@ -82,17 +82,17 @@ export const ArticlesListScreen: React.FC = () => {
     if (!activeSite?.id) return;
     setIsLoadingWebsiteArticles(true);
     try {
-      // Map filter selection to valid Prisma WorkflowStatus and status
-      let mappedWorkflowStatus: string | undefined = undefined;
+      // Map filter selection cleanly without restricting workflowStatus to IMPORTED
       let mappedStatus: string | undefined = undefined;
-      if (status === 'draft' || status === 'IMPORTED') {
-        mappedWorkflowStatus = 'IMPORTED';
+      let mappedWorkflowStatus: string | undefined = undefined;
+
+      if (status === 'draft') {
         mappedStatus = 'draft';
       } else if (status === 'publish' || status === 'PUBLISHED') {
         mappedWorkflowStatus = 'PUBLISHED';
         mappedStatus = 'publish';
-      } else if (['ENHANCING', 'READY_FOR_REVIEW'].includes(status)) {
-        mappedWorkflowStatus = status;
+      } else if (['IMPORTED', 'ENHANCING', 'READY_FOR_REVIEW'].includes(status.toUpperCase())) {
+        mappedWorkflowStatus = status.toUpperCase();
       }
 
       console.log('[loadWebsiteArticles] Fetching articles for site:', activeSite.id, {
@@ -129,12 +129,14 @@ export const ArticlesListScreen: React.FC = () => {
           if (Array.isArray(d.results)) return d.results;
           if (Array.isArray(d.content)) return d.content;
           if (Array.isArray(d.rows)) return d.rows;
+          if (Array.isArray(d.list)) return d.list;
         }
 
         if (Array.isArray(raw.articles)) return raw.articles;
         if (Array.isArray(raw.items)) return raw.items;
         if (Array.isArray(raw.records)) return raw.records;
         if (Array.isArray(raw.results)) return raw.results;
+        if (Array.isArray(raw.list)) return raw.list;
 
         return [];
       };
@@ -182,8 +184,8 @@ export const ArticlesListScreen: React.FC = () => {
         focusKeyword: item.focusKeyword || item.targetKeyword || '',
         metaDescription: item.metaDescription || item.excerpt || '',
         contentHtml: item.contentHtml || item.rawContent || (typeof item.content === 'object' ? item.content.rendered : item.content) || '',
-        workflowStatus: item.workflowStatus || (item.wpStatus === 'publish' ? 'PUBLISHED' : 'IMPORTED'),
-        wpStatus: item.wpStatus || item.status || 'draft',
+        workflowStatus: item.workflowStatus || (item.wpStatus === 'publish' || item.status === 'publish' ? 'PUBLISHED' : 'READY_FOR_REVIEW'),
+        wpStatus: (item.wpStatus || item.status || 'draft').toLowerCase(),
         featuredMediaUrl: item.featuredMediaUrl || item.featuredImage || item.featuredMedia?.sourceUrl || null,
         images: Array.isArray(item.images) ? item.images : [],
         createdAt: item.createdAt || item.date || new Date().toISOString(),
@@ -194,13 +196,17 @@ export const ArticlesListScreen: React.FC = () => {
       // Apply client-side filter if specific status is selected
       let filteredList = normalizedList;
       if (status === 'draft') {
-        filteredList = normalizedList.filter(
-          a => a.wpStatus === 'draft' || a.workflowStatus === 'IMPORTED'
-        );
+        filteredList = normalizedList.filter(a => {
+          const s = (a.wpStatus || '').toLowerCase();
+          const ws = (a.workflowStatus || '').toUpperCase();
+          return s === 'draft' || ws !== 'PUBLISHED';
+        });
       } else if (status === 'publish') {
-        filteredList = normalizedList.filter(
-          a => a.wpStatus === 'publish' || a.workflowStatus === 'PUBLISHED'
-        );
+        filteredList = normalizedList.filter(a => {
+          const s = (a.wpStatus || '').toLowerCase();
+          const ws = (a.workflowStatus || '').toUpperCase();
+          return s === 'publish' || ws === 'PUBLISHED';
+        });
       }
 
       setWebsiteArticles(filteredList);
