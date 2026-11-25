@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Button } from '../../common/Button';
 import { Modal } from '../../common/Modal';
+import { McpIntegrationsTab } from './McpIntegrationsTab';
 import { useApp } from '../../../context/AppContext';
 import { settingsService } from '../../../api/services/settings.service';
 import type {
@@ -25,6 +26,7 @@ import {
   Zap,
   Camera,
   AlertTriangle,
+  Plug,
 } from 'lucide-react';
 
 export const SettingsScreen: React.FC = () => {
@@ -35,8 +37,8 @@ export const SettingsScreen: React.FC = () => {
     addToast,
   } = useApp();
 
-  // Active Settings Tab: 'ai' | 'profile'
-  const [activeTab, setActiveTab] = useState<'ai' | 'profile'>('ai');
+  // Active Settings Tab: 'ai' | 'mcp' | 'profile'
+  const [activeTab, setActiveTab] = useState<'ai' | 'mcp' | 'profile'>('ai');
 
   // ==========================================
   // AI & Media Settings State
@@ -318,6 +320,18 @@ export const SettingsScreen: React.FC = () => {
         </button>
 
         <button
+          onClick={() => setActiveTab('mcp')}
+          className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-semibold transition-all cursor-pointer shrink-0 ${
+            activeTab === 'mcp'
+              ? 'bg-violet-600 text-white shadow-xs'
+              : 'text-slate-600 dark:text-zinc-400 hover:text-slate-900 dark:hover:text-zinc-100 hover:bg-slate-100 dark:hover:bg-zinc-900'
+          }`}
+        >
+          <Plug className="w-4 h-4" />
+          <span>MCP Connect</span>
+        </button>
+
+        <button
           onClick={() => setActiveTab('profile')}
           className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-semibold transition-all cursor-pointer shrink-0 ${
             activeTab === 'profile'
@@ -329,6 +343,11 @@ export const SettingsScreen: React.FC = () => {
           <span>Profile & Account</span>
         </button>
       </div>
+
+      {/* ========================================================================= */}
+      {/* TAB 2: MCP INTEGRATIONS & CONNECTION KEYS                                 */}
+      {/* ========================================================================= */}
+      {activeTab === 'mcp' && <McpIntegrationsTab />}
 
       {/* ========================================================================= */}
       {/* TAB 1: AI & MEDIA PROVIDERS SETTINGS                                      */}
