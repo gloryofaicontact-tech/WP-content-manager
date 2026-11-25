@@ -136,3 +136,108 @@ export interface PublishArticleResponseDto {
   liveUrl: string;
   publishedAt: string;
 }
+
+export interface ProcessArticleDto {
+  contentTypeSlug: string;
+  rawDocument: string;
+}
+
+export interface ImageAssetDto {
+  id: string;
+  title: string;
+  previewUrl: string;
+  sourceUrl?: string;
+  downloadUrl?: string;
+  author?: string;
+  width?: number;
+  height?: number;
+  provider?: string;
+  [key: string]: any;
+}
+
+export interface ProcessedArticleImageItemDto {
+  placeholderId?: string;
+  position?: string;
+  recommendedSearch?: string;
+  fallbackSearch?: string;
+  altText?: string;
+  targetHeading?: string;
+  selectedAsset?: ImageAssetDto | null;
+  alternativeOptions?: ImageAssetDto[];
+}
+
+export interface ProcessedArticleDataDto {
+  id: string;
+  websiteId: string;
+  contentTypeSlug: string;
+  contentTypeName?: string;
+  title: string;
+  slug: string;
+  focusKeyword?: string;
+  metaDescription?: string;
+  contentHtml: string;
+  workflowStatus: string;
+  wpStatus: string;
+  featuredMediaUrl?: string | null;
+  images?: ProcessedArticleImageItemDto[];
+  categories?: string[];
+  tags?: string[];
+  customFields?: Record<string, any>;
+  summaryNotes?: string;
+  createdAt?: string;
+  [key: string]: any;
+}
+
+export interface ProcessArticleResponseDto {
+  statusCode?: number;
+  success?: boolean;
+  message?: string;
+  data: ProcessedArticleDataDto;
+  meta?: {
+    timestamp?: string;
+    path?: string;
+    [key: string]: any;
+  };
+}
+
+export interface UpdateWebsiteArticleDto {
+  title?: string;
+  focusKeyword?: string;
+  metaDescription?: string;
+  contentHtml?: string;
+  contentTypeSlug?: string;
+  tags?: string[];
+  status?: string;
+  [key: string]: any;
+}
+
+export interface PublishWebsiteArticleDto {
+  status: 'publish' | 'draft' | string;
+}
+
+export interface WebsiteArticlesResponseDto {
+  statusCode?: number;
+  success?: boolean;
+  message?: string;
+  data: {
+    data: ProcessedArticleDataDto[];
+    meta?: {
+      total?: number;
+      totalItems?: number;
+      lastPage?: number;
+      totalPages?: number;
+      currentPage?: number;
+      perPage?: number;
+      [key: string]: any;
+    };
+  };
+  meta?: any;
+}
+
+export interface WebsiteArticleDetailResponseDto {
+  statusCode?: number;
+  success?: boolean;
+  message?: string;
+  data: ProcessedArticleDataDto;
+  meta?: any;
+}

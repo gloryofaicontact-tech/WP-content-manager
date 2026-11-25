@@ -8,7 +8,7 @@ export const USER_STORAGE_KEY = 'wp_auth_user';
 
 // Base URL from environment or default to local NestJS standard port 3000/api
 const BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3000/api';
-const TIMEOUT = Number(import.meta.env.VITE_API_TIMEOUT) || 15000;
+const TIMEOUT = Number(import.meta.env.VITE_API_TIMEOUT) || 60000;
 
 export const apiClient = axios.create({
   baseURL: BASE_URL,

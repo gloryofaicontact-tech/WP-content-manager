@@ -23,6 +23,12 @@ export const API_ENDPOINTS = {
       `/websites/${websiteId}/content/${contentTypeSlug}/${wpPostId}`,
     INGEST_CONTENT: (websiteId: string, contentTypeSlug: string, wpPostId: number | string) =>
       `/websites/${websiteId}/content/${contentTypeSlug}/${wpPostId}/ingest`,
+    PROCESS_ARTICLE: (websiteId: string) => `/websites/${websiteId}/articles/process`,
+    ARTICLES: (websiteId: string) => `/websites/${websiteId}/articles`,
+    ARTICLE_DETAIL: (websiteId: string, articleId: string) =>
+      `/websites/${websiteId}/articles/${articleId}`,
+    PUBLISH_ARTICLE: (websiteId: string, articleId: string) =>
+      `/websites/${websiteId}/articles/${articleId}/publish`,
   },
   CONTENT_TYPES: {
     DISCOVER: '/content-types/discover',

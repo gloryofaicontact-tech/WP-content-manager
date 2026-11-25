@@ -12,6 +12,15 @@ import type {
   ContentTypeDetailDto,
   LiveContentResponseDto,
 } from '../types/website.dto';
+import type {
+  ProcessArticleDto,
+  ProcessArticleResponseDto,
+  UpdateWebsiteArticleDto,
+  PublishWebsiteArticleDto,
+  WebsiteArticlesResponseDto,
+  WebsiteArticleDetailResponseDto,
+  ProcessedArticleDataDto,
+} from '../types/article.dto';
 
 export const websitesService = {
   /**
@@ -232,6 +241,116 @@ export const websitesService = {
   ): Promise<any> {
     const response = await apiClient.post<any>(
       API_ENDPOINTS.WEBSITES.INGEST_CONTENT(websiteId, contentTypeSlug, wpPostId)
+    );
+    return response.data;
+  },
+
+  /**
+   * POST {{baseUrl}}/websites/{{websiteId}}/articles/process
+   */
+  async processArticle(
+    websiteId: string,
+    payload: ProcessArticleDto
+  ): Promise<ProcessArticleResponseDto> {
+    const response = await apiClient.post<ProcessArticleResponseDto>(
+      API_ENDPOINTS.WEBSITES.PROCESS_ARTICLE(websiteId),
+      payload,
+      {
+        timeout: 120000, // 2 minutes for LLM extraction + Envato stock discovery
+      }
+    );
+    return response.data;
+  },
+
+  /**
+   * GET {{baseUrl}}/websites/{{websiteId}}/articles?page=1&limit=10
+   */
+  async getWebsiteArticles(
+    websiteId: string,
+    params?: { page?: number; limit?: number; workflowStatus?: string; status?: string; search?: string }
+  ): Promise<WebsiteArticlesResponseDto | any> {
+    const cleanParams: Record<string, any> = {
+      page: params?.page ?? 1,
+      limit: params?.limit ?? 10,
+    };
+
+    // Valid Prisma WorkflowStatus enum values: IMPORTED, ENHANCING, READY_FOR_REVIEW, PUBLISHED
+    const validEnums = ['IMPORTED', 'ENHANCING', 'READY_FOR_REVIEW', 'PUBLISHED'];
+    if (params?.workflowStatus && validEnums.includes(params.workflowStatus.toUpperCase())) {
+      cleanParams.workflowStatus = params.workflowStatus.toUpperCase();
+    }
+
+    if (params?.status && ['draft', 'publish'].includes(params.status.toLowerCase())) {
+      cleanParams.status = params.status.toLowerCase();
+    }
+
+    if (params?.search && params.search.trim()) {
+      cleanParams.search = params.search.trim();
+    }
+
+    const response = await apiClient.get<any>(
+      API_ENDPOINTS.WEBSITES.ARTICLES(websiteId),
+      { params: cleanParams }
+    );
+    return response.data;
+  },
+
+  /**
+   * GET {{baseUrl}}/websites/{{websiteId}}/articles/{{articleId}}
+   */
+  async getWebsiteArticleDetail(
+    websiteId: string,
+    articleId: string
+  ): Promise<ProcessedArticleDataDto> {
+    const response = await apiClient.get<WebsiteArticleDetailResponseDto>(
+      API_ENDPOINTS.WEBSITES.ARTICLE_DETAIL(websiteId, articleId)
+    );
+    const resData: any = response.data;
+    return resData?.data || resData;
+  },
+
+  /**
+   * PATCH {{baseUrl}}/websites/{{websiteId}}/articles/{{articleId}}
+   */
+  async updateWebsiteArticle(
+    websiteId: string,
+    articleId: string,
+    payload: UpdateWebsiteArticleDto
+  ): Promise<ProcessedArticleDataDto> {
+    const response = await apiClient.patch<WebsiteArticleDetailResponseDto>(
+      API_ENDPOINTS.WEBSITES.ARTICLE_DETAIL(websiteId, articleId),
+      payload
+    );
+    const resData: any = response.data;
+    return resData?.data || resData;
+  },
+
+  /**
+   * POST {{baseUrl}}/websites/{{websiteId}}/articles/{{articleId}}/publish
+   * Toggle switch between "publish" and "draft"
+   */
+  async publishWebsiteArticle(
+    websiteId: string,
+    articleId: string,
+    payload: PublishWebsiteArticleDto = { status: 'publish' }
+  ): Promise<any> {
+    const response = await apiClient.post<any>(
+      API_ENDPOINTS.WEBSITES.PUBLISH_ARTICLE(websiteId, articleId),
+      payload
+    );
+    const resData: any = response.data;
+    return resData?.data || resData;
+  },
+
+  /**
+   * DELETE {{baseUrl}}/websites/{{websiteId}}/articles/{{articleId}}
+   */
+  async deleteWebsiteArticle(
+    websiteId: string,
+    articleId: string
+  ): Promise<{ success: boolean; message?: string }> {
+    const response = await apiClient.delete<{ success: boolean; message?: string }>(
+      API_ENDPOINTS.WEBSITES.ARTICLE_DETAIL(websiteId, articleId)
     );
     return response.data;
   },
