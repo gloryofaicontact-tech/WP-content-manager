@@ -22,7 +22,24 @@ export const WebsiteDetailScreen: React.FC = () => {
     testWebsiteConnection,
   } = useApp();
 
-  const site = sites.find(s => s.id === selectedWebsiteIdForDetail) || sites[0];
+  const site = sites.find(s => s.id === selectedWebsiteIdForDetail);
+
+  if (!site) {
+    return (
+      <div className="space-y-6 max-w-7xl mx-auto py-12 text-center">
+        <h2 className="text-lg font-bold text-slate-800 dark:text-zinc-200">No Website Selected</h2>
+        <p className="text-xs text-slate-500 mt-1">Please select a connected WordPress website to view details.</p>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => setCurrentScreen('websites')}
+          className="mt-4"
+        >
+          Back to Websites
+        </Button>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6 max-w-7xl mx-auto">

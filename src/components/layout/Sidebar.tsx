@@ -12,10 +12,10 @@ import {
 } from 'lucide-react';
 
 export const Sidebar: React.FC = () => {
-  const { currentScreen, setCurrentScreen, sites, activeSiteId, navigateToNewArticle } = useApp();
+  const { currentScreen, setCurrentScreen, sites, activeSiteId, navigateToNewArticle, setIsAddWebsiteModalOpen } = useApp();
   const { stats } = useArticles();
 
-  const activeSite = sites.find(s => s.id === activeSiteId) || sites[0];
+  const activeSite = sites.find(s => s.id === activeSiteId) || sites[0] || null;
 
   const navItems: Array<{
     id: ScreenId;
@@ -118,24 +118,34 @@ export const Sidebar: React.FC = () => {
 
       {/* Connected Site Indicator Footer */}
       <div className="p-3 border-t border-slate-200 dark:border-zinc-800/80 bg-slate-50/60 dark:bg-zinc-950/60">
-        <div className="p-2.5 rounded-xl bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 shadow-xs">
-          <div className="flex items-center gap-2">
-            <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse shrink-0" />
-            <div className="min-w-0 flex-1">
-              <span className="text-[11px] font-bold text-slate-800 dark:text-zinc-200 truncate block">
-                {activeSite.name}
-              </span>
-              <a
-                href={activeSite.url}
-                target="_blank"
-                rel="noreferrer"
-                className="text-[10px] font-mono text-slate-400 hover:text-slate-600 dark:text-zinc-500 flex items-center gap-0.5 truncate"
-              >
-                {activeSite.url.replace('https://', '')} <ExternalLink className="w-2.5 h-2.5" />
-              </a>
+        {activeSite ? (
+          <div className="p-2.5 rounded-xl bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 shadow-xs">
+            <div className="flex items-center gap-2">
+              <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse shrink-0" />
+              <div className="min-w-0 flex-1">
+                <span className="text-[11px] font-bold text-slate-800 dark:text-zinc-200 truncate block">
+                  {activeSite.name}
+                </span>
+                <a
+                  href={activeSite.url}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="text-[10px] font-mono text-slate-400 hover:text-slate-600 dark:text-zinc-500 flex items-center gap-0.5 truncate"
+                >
+                  {activeSite.url.replace('https://', '')} <ExternalLink className="w-2.5 h-2.5" />
+                </a>
+              </div>
             </div>
           </div>
-        </div>
+        ) : (
+          <button
+            onClick={() => setIsAddWebsiteModalOpen(true)}
+            className="w-full p-2.5 rounded-xl border border-dashed border-slate-300 dark:border-zinc-800 hover:border-violet-500 text-slate-500 hover:text-violet-600 dark:text-zinc-400 dark:hover:text-violet-400 text-[11px] font-medium flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
+          >
+            <Globe className="w-3.5 h-3.5" />
+            <span>Connect Website</span>
+          </button>
+        )}
       </div>
     </aside>
   );

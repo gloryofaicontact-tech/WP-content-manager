@@ -13,24 +13,27 @@ export const AddWebsiteModal: React.FC = () => {
   const [appPassword, setAppPassword] = useState('');
   const [isVerifying, setIsVerifying] = useState(false);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!name.trim() || !url.trim() || !username.trim()) return;
 
     setIsVerifying(true);
-    setTimeout(() => {
-      addWebsite({
+    try {
+      await addWebsite({
         name: name.trim(),
         url: url.trim(),
         username: username.trim(),
-        applicationPassword: appPassword.trim() || '•••• •••• •••• ••••',
+        applicationPassword: appPassword.trim(),
       });
-      setIsVerifying(false);
       setName('');
       setUrl('');
       setUsername('');
       setAppPassword('');
-    }, 900);
+    } catch {
+      // Error toast is already shown by AppContext
+    } finally {
+      setIsVerifying(false);
+    }
   };
 
   return (

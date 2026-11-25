@@ -17,9 +17,41 @@ export const AuthScreen: React.FC = () => {
   const { authMode, setAuthMode, login, register, addToast } = useApp();
   const { theme, toggleTheme } = useTheme();
 
-  // Login form state
-  const [loginEmail, setLoginEmail] = useState('');
-  const [loginPassword, setLoginPassword] = useState('');
+  // Storage key for remember me
+  const REMEMBER_ME_KEY = 'wp_remembered_credentials';
+
+  // Login form state (pre-fill if saved)
+  const [loginEmail, setLoginEmail] = useState(() => {
+    try {
+      const saved = localStorage.getItem(REMEMBER_ME_KEY);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        return parsed.email || '';
+      }
+    } catch {
+      // ignore
+    }
+    return '';
+  });
+  const [loginPassword, setLoginPassword] = useState(() => {
+    try {
+      const saved = localStorage.getItem(REMEMBER_ME_KEY);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        return parsed.password || '';
+      }
+    } catch {
+      // ignore
+    }
+    return '';
+  });
+  const [rememberMe, setRememberMe] = useState(() => {
+    try {
+      return !!localStorage.getItem(REMEMBER_ME_KEY);
+    } catch {
+      return false;
+    }
+  });
   const [showLoginPassword, setShowLoginPassword] = useState(false);
 
   // Register form state
@@ -45,6 +77,15 @@ export const AuthScreen: React.FC = () => {
 
     setIsLoading(true);
     try {
+      if (rememberMe) {
+        localStorage.setItem(
+          REMEMBER_ME_KEY,
+          JSON.stringify({ email: loginEmail.trim(), password: loginPassword })
+        );
+      } else {
+        localStorage.removeItem(REMEMBER_ME_KEY);
+      }
+
       await login({
         email: loginEmail.trim(),
         password: loginPassword,
@@ -190,6 +231,21 @@ export const AuthScreen: React.FC = () => {
                   {showLoginPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                 </button>
               </div>
+            </div>
+
+            {/* Remember Me Checkbox */}
+            <div className="flex items-center justify-between pt-0.5">
+              <label className="flex items-center gap-2 cursor-pointer select-none">
+                <input
+                  type="checkbox"
+                  checked={rememberMe}
+                  onChange={e => setRememberMe(e.target.checked)}
+                  className="w-4 h-4 rounded text-violet-600 border-slate-300 dark:border-zinc-700 bg-slate-50 dark:bg-zinc-900 focus:ring-violet-500 focus:ring-offset-0 transition-colors cursor-pointer"
+                />
+                <span className="text-xs text-slate-600 dark:text-zinc-400 font-medium">
+                  Remember credentials
+                </span>
+              </label>
             </div>
 
             <Button

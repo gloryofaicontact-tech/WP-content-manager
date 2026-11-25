@@ -9,16 +9,54 @@ import {
   Shield,
   Layers,
   ArrowRight,
+  Trash2,
+  Globe,
 } from 'lucide-react';
 
 export const WebsitesListScreen: React.FC = () => {
   const {
     sites,
+    isWebsitesLoading,
+    loadWebsites,
+    deleteWebsite,
     setIsAddWebsiteModalOpen,
     navigateToWebsiteDetail,
     scanWebsite,
     testWebsiteConnection,
   } = useApp();
+
+  const [testingId, setTestingId] = React.useState<string | null>(null);
+  const [scanningId, setScanningId] = React.useState<string | null>(null);
+  const [deletingId, setDeletingId] = React.useState<string | null>(null);
+
+  const handleTestConnection = async (id: string) => {
+    setTestingId(id);
+    try {
+      await testWebsiteConnection(id);
+    } finally {
+      setTestingId(null);
+    }
+  };
+
+  const handleScanWebsite = async (id: string) => {
+    setScanningId(id);
+    try {
+      await scanWebsite(id);
+    } finally {
+      setScanningId(null);
+    }
+  };
+
+  const handleDeleteWebsite = async (id: string, name: string) => {
+    if (window.confirm(`Are you sure you want to remove "${name}"?`)) {
+      setDeletingId(id);
+      try {
+        await deleteWebsite(id);
+      } finally {
+        setDeletingId(null);
+      }
+    }
+  };
 
   return (
     <div className="space-y-6 max-w-7xl mx-auto">
@@ -33,18 +71,55 @@ export const WebsitesListScreen: React.FC = () => {
           </p>
         </div>
 
-        <Button
-          variant="glow"
-          size="sm"
-          onClick={() => setIsAddWebsiteModalOpen(true)}
-          icon={<Plus className="w-4 h-4" />}
-        >
-          Add Website
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => loadWebsites()}
+            isLoading={isWebsitesLoading}
+            icon={<RefreshCw className={`w-3.5 h-3.5 ${isWebsitesLoading ? 'animate-spin' : ''}`} />}
+          >
+            Refresh
+          </Button>
+          <Button
+            variant="glow"
+            size="sm"
+            onClick={() => setIsAddWebsiteModalOpen(true)}
+            icon={<Plus className="w-4 h-4" />}
+          >
+            Add Website
+          </Button>
+        </div>
       </div>
 
-      {/* Websites Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+      {/* Websites Grid or Empty State */}
+      {isWebsitesLoading && sites.length === 0 ? (
+        <div className="py-16 text-center bg-white dark:bg-zinc-900 rounded-3xl border border-slate-200 dark:border-zinc-800 p-8">
+          <RefreshCw className="w-8 h-8 text-violet-600 animate-spin mx-auto mb-3" />
+          <h3 className="text-sm font-bold text-slate-800 dark:text-zinc-200">Loading Websites...</h3>
+          <p className="text-xs text-slate-500 mt-1">Fetching your WordPress sites from the backend.</p>
+        </div>
+      ) : sites.length === 0 ? (
+        <div className="py-16 text-center bg-white dark:bg-zinc-900 rounded-3xl border border-dashed border-slate-300 dark:border-zinc-800 p-8 max-w-lg mx-auto">
+          <div className="w-12 h-12 rounded-2xl bg-violet-50 dark:bg-violet-950/40 text-violet-600 dark:text-violet-400 mx-auto flex items-center justify-center mb-3">
+            <Globe className="w-6 h-6" />
+          </div>
+          <h3 className="text-sm font-bold text-slate-900 dark:text-zinc-100">No WordPress Sites Connected</h3>
+          <p className="text-xs text-slate-500 dark:text-zinc-400 mt-1 max-w-sm mx-auto">
+            Connect your first WordPress website using an Application Password to scan content types and start publishing.
+          </p>
+          <Button
+            variant="glow"
+            size="sm"
+            onClick={() => setIsAddWebsiteModalOpen(true)}
+            icon={<Plus className="w-4 h-4" />}
+            className="mt-4"
+          >
+            Connect WordPress Site
+          </Button>
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
         {sites.map(site => (
           <div
             key={site.id}
@@ -85,7 +160,7 @@ export const WebsitesListScreen: React.FC = () => {
                     <Layers className="w-3.5 h-3.5" /> Scanned Post Types:
                   </span>
                   <span className="font-mono font-semibold text-slate-800 dark:text-zinc-200">
-                    {site.discoveredTypes.length} Types Found
+                    {site.discoveredTypes?.length || 0} Types Found
                   </span>
                 </div>
                 <div className="flex items-center justify-between text-[11px] text-slate-400 font-mono">
@@ -100,21 +175,23 @@ export const WebsitesListScreen: React.FC = () => {
               <Button
                 variant="outline"
                 size="xs"
-                onClick={() => testWebsiteConnection(site.id)}
+                onClick={() => handleTestConnection(site.id)}
+                isLoading={testingId === site.id}
                 icon={<RefreshCw className="w-3 h-3 text-slate-500" />}
                 className="flex-1"
               >
-                Test Connection
+                Test
               </Button>
 
               <Button
                 variant="secondary"
                 size="xs"
-                onClick={() => scanWebsite(site.id)}
+                onClick={() => handleScanWebsite(site.id)}
+                isLoading={scanningId === site.id}
                 icon={<RefreshCw className="w-3 h-3 text-violet-600 dark:text-violet-400" />}
                 className="flex-1"
               >
-                Scan Site
+                Scan
               </Button>
 
               <Button
@@ -122,14 +199,26 @@ export const WebsitesListScreen: React.FC = () => {
                 size="xs"
                 onClick={() => navigateToWebsiteDetail(site.id)}
                 icon={<ArrowRight className="w-3 h-3" />}
-                className="px-3"
+                className="px-2.5"
+                title="View Scanned Details"
               >
                 Details
               </Button>
+
+              <button
+                type="button"
+                onClick={() => handleDeleteWebsite(site.id, site.name)}
+                disabled={deletingId === site.id}
+                className="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 dark:hover:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/30 transition-colors cursor-pointer"
+                title="Delete Website"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+              </button>
             </div>
           </div>
         ))}
-      </div>
+        </div>
+      )}
     </div>
   );
 };

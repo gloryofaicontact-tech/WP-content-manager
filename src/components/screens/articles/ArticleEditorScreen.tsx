@@ -25,7 +25,7 @@ export const ArticleEditorScreen: React.FC = () => {
   const editingArticle = articles.find(a => a.id === selectedArticleIdForEdit);
 
   // Form State
-  const [websiteId, setWebsiteId] = useState(editingArticle?.websiteId || sites[0]?.id || 'site-1');
+  const [websiteId, setWebsiteId] = useState(editingArticle?.websiteId || sites[0]?.id || '');
   const [postType, setPostType] = useState(editingArticle?.postType || 'post');
   const [title, setTitle] = useState(editingArticle?.title || '');
   const [content, setContent] = useState(editingArticle?.content || '');
@@ -36,7 +36,7 @@ export const ArticleEditorScreen: React.FC = () => {
   const [isEnhancing, setIsEnhancing] = useState(false);
   const [isPublishing, setIsPublishing] = useState(false);
 
-  const selectedSite = sites.find(s => s.id === websiteId) || sites[0];
+  const selectedSite = sites.find(s => s.id === websiteId) || sites[0] || null;
   const scannedTypes = selectedSite?.discoveredTypes || [];
   const selectedTypeObj = scannedTypes.find(t => t.id === postType);
   const availableCategories = selectedTypeObj?.taxonomies[0]?.terms.map(t => t.name) || [

@@ -33,8 +33,10 @@ export interface WordPressSite {
   url: string;
   username: string;
   applicationPassword?: string;
-  status: 'CONNECTED' | 'ERROR';
+  status: 'CONNECTED' | 'ERROR' | string;
   totalArticles: number;
   lastScanned?: string;
   discoveredTypes: ContentType[];
+  createdAt?: string;
+  updatedAt?: string;
 }

@@ -235,31 +235,38 @@ export const DashboardScreen: React.FC = () => {
           </div>
 
           <div className="space-y-3">
-            {sites.map(site => (
-              <div
-                key={site.id}
-                onClick={() => navigateToWebsiteDetail(site.id)}
-                className="p-3.5 rounded-xl border border-slate-200 dark:border-zinc-800 bg-slate-50/60 dark:bg-zinc-950/40 hover:bg-slate-100/60 dark:hover:bg-zinc-800/40 transition-all cursor-pointer flex items-center justify-between group"
-              >
-                <div className="min-w-0">
-                  <div className="flex items-center gap-2">
-                    <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse shrink-0" />
-                    <span className="text-xs font-bold text-slate-900 dark:text-zinc-100 truncate group-hover:text-violet-600 transition-colors">
-                      {site.name}
+            {sites.length === 0 ? (
+              <div className="py-6 text-center text-xs text-slate-500">
+                <Globe className="w-6 h-6 text-slate-300 dark:text-zinc-700 mx-auto mb-2" />
+                No WordPress sites connected yet.
+              </div>
+            ) : (
+              sites.map(site => (
+                <div
+                  key={site.id}
+                  onClick={() => navigateToWebsiteDetail(site.id)}
+                  className="p-3.5 rounded-xl border border-slate-200 dark:border-zinc-800 bg-slate-50/60 dark:bg-zinc-950/40 hover:bg-slate-100/60 dark:hover:bg-zinc-800/40 transition-all cursor-pointer flex items-center justify-between group"
+                >
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-2">
+                      <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse shrink-0" />
+                      <span className="text-xs font-bold text-slate-900 dark:text-zinc-100 truncate group-hover:text-violet-600 transition-colors">
+                        {site.name}
+                      </span>
+                    </div>
+                    <span className="text-[11px] font-mono text-slate-500 dark:text-zinc-400 truncate block mt-0.5">
+                      {site.url}
                     </span>
                   </div>
-                  <span className="text-[11px] font-mono text-slate-500 dark:text-zinc-400 truncate block mt-0.5">
-                    {site.url}
-                  </span>
-                </div>
 
-                <div className="text-right shrink-0">
-                  <span className="text-[11px] font-mono font-semibold px-2 py-0.5 rounded bg-white dark:bg-zinc-800 border border-slate-200 dark:border-zinc-700 text-slate-700 dark:text-zinc-300">
-                    {site.discoveredTypes.length} CPTs
-                  </span>
+                  <div className="text-right shrink-0">
+                    <span className="text-[11px] font-mono font-semibold px-2 py-0.5 rounded bg-white dark:bg-zinc-800 border border-slate-200 dark:border-zinc-700 text-slate-700 dark:text-zinc-300">
+                      {site.discoveredTypes?.length || 0} CPTs
+                    </span>
+                  </div>
                 </div>
-              </div>
-            ))}
+              ))
+            )}
           </div>
 
           <Button

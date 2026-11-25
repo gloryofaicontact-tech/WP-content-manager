@@ -29,36 +29,48 @@ export const TopNavbar: React.FC = () => {
     <header className="h-16 border-b border-slate-200 dark:border-zinc-800/80 bg-white/80 dark:bg-zinc-950/80 backdrop-blur-md px-6 flex items-center justify-between sticky top-0 z-30 transition-colors">
       {/* Left: Active WordPress Site Switcher */}
       <div className="flex items-center gap-3">
-        <div className="relative">
-          <div className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-slate-50 dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 text-xs font-semibold text-slate-800 dark:text-zinc-200 shadow-xs cursor-pointer">
-            <Globe className="w-3.5 h-3.5 text-violet-600 dark:text-violet-400" />
-            <select
-              value={activeSiteId}
-              onChange={e => {
-                setActiveSiteId(e.target.value);
-                const s = sites.find(site => site.id === e.target.value);
-                addToast({
-                  title: 'Active Website Changed',
-                  message: `Now managing ${s?.name}`,
-                  type: 'info',
-                });
-              }}
-              className="bg-transparent text-xs text-slate-800 dark:text-zinc-200 outline-none cursor-pointer pr-4 appearance-none font-medium"
-            >
-              {sites.map(site => (
-                <option key={site.id} value={site.id} className="bg-white dark:bg-zinc-900 text-slate-800 dark:text-zinc-200">
-                  {site.name} ({site.url})
-                </option>
-              ))}
-            </select>
-            <ChevronDown className="w-3.5 h-3.5 text-slate-400 dark:text-zinc-500 absolute right-2.5 pointer-events-none" />
+        {sites.length > 0 ? (
+          <div className="relative">
+            <div className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-slate-50 dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 text-xs font-semibold text-slate-800 dark:text-zinc-200 shadow-xs cursor-pointer">
+              <Globe className="w-3.5 h-3.5 text-violet-600 dark:text-violet-400" />
+              <select
+                value={activeSiteId}
+                onChange={e => {
+                  setActiveSiteId(e.target.value);
+                  const s = sites.find(site => site.id === e.target.value);
+                  addToast({
+                    title: 'Active Website Changed',
+                    message: `Now managing ${s?.name}`,
+                    type: 'info',
+                  });
+                }}
+                className="bg-transparent text-xs text-slate-800 dark:text-zinc-200 outline-none cursor-pointer pr-4 appearance-none font-medium"
+              >
+                {sites.map(site => (
+                  <option key={site.id} value={site.id} className="bg-white dark:bg-zinc-900 text-slate-800 dark:text-zinc-200">
+                    {site.name} ({site.url})
+                  </option>
+                ))}
+              </select>
+              <ChevronDown className="w-3.5 h-3.5 text-slate-400 dark:text-zinc-500 absolute right-2.5 pointer-events-none" />
+            </div>
           </div>
-        </div>
+        ) : (
+          <button
+            onClick={() => setIsAddWebsiteModalOpen(true)}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-zinc-900 dark:hover:bg-zinc-800 text-xs font-semibold text-violet-600 dark:text-violet-400 transition-colors cursor-pointer"
+          >
+            <Plus className="w-3.5 h-3.5" />
+            <span>Connect Website</span>
+          </button>
+        )}
 
-        <span className="hidden sm:inline-flex items-center gap-1.5 text-xs text-emerald-600 dark:text-emerald-400 font-semibold font-mono">
-          <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-          Connected
-        </span>
+        {sites.length > 0 && (
+          <span className="hidden sm:inline-flex items-center gap-1.5 text-xs text-emerald-600 dark:text-emerald-400 font-semibold font-mono">
+            <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+            Connected
+          </span>
+        )}
       </div>
 
       {/* Right: Quick actions, Theme switcher, Notifications, User info & Logout */}
