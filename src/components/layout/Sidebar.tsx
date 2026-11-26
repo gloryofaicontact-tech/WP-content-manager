@@ -6,7 +6,6 @@ import {
   Globe,
   FileText,
   Settings,
-  Zap,
   PlusCircle,
   ExternalLink,
   ChevronLeft,
@@ -73,21 +72,20 @@ export const Sidebar: React.FC = () => {
       `}
     >
       {/* Brand Header */}
-      <div className="h-16 px-4 border-b border-slate-200 dark:border-zinc-800/80 flex items-center justify-between">
-        <div className={`flex items-center gap-3 overflow-hidden ${isSidebarCollapsed ? 'mx-auto' : ''}`}>
-          <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-violet-600 to-indigo-600 flex items-center justify-center text-white font-bold shadow-sm shadow-violet-500/25 shrink-0 transition-transform hover:scale-105">
-            <Zap className="w-4.5 h-4.5 fill-white" />
-          </div>
-
-          {!isSidebarCollapsed && (
-            <div className="min-w-0 transition-opacity duration-200">
-              <span className="font-bold text-sm text-slate-900 dark:text-zinc-100 tracking-tight block truncate">
-                WP-Automation
-              </span>
-              <span className="text-[11px] text-slate-500 dark:text-zinc-500 font-medium block truncate">
-                Publishing SaaS
-              </span>
-            </div>
+      <div className="h-16 px-3.5 border-b border-slate-200 dark:border-zinc-800/80 flex items-center justify-between">
+        <div className={`flex items-center overflow-hidden ${isSidebarCollapsed ? 'mx-auto' : ''}`}>
+          {isSidebarCollapsed ? (
+            <img
+              src="/favicon.png"
+              alt="WP-Automation"
+              className="w-10 h-10 rounded-xl object-contain shadow-xs transition-transform hover:scale-105"
+            />
+          ) : (
+            <img
+              src="/logo.png"
+              alt="WP-Automation"
+              className="h-10 md:h-11 max-w-[185px] w-auto object-contain object-left transition-all duration-200"
+            />
           )}
         </div>
 

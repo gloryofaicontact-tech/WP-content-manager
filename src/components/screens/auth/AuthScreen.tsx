@@ -4,7 +4,6 @@ import { useTheme } from '../../../context/ThemeContext';
 import { Button } from '../../common/Button';
 import { authService } from '../../../api/services/auth.service';
 import {
-  Zap,
   Mail,
   Lock,
   User,
@@ -314,9 +313,11 @@ export const AuthScreen: React.FC = () => {
       <div className="w-full max-w-md bg-white dark:bg-zinc-900 rounded-3xl border border-slate-200 dark:border-zinc-800 shadow-xl shadow-slate-200/50 dark:shadow-black/50 p-7 sm:p-8 animate-slide-fade">
         {/* Brand Header */}
         <div className="text-center mb-6">
-          <div className="w-11 h-11 rounded-2xl bg-gradient-to-tr from-violet-600 to-indigo-600 mx-auto flex items-center justify-center text-white shadow-md shadow-violet-500/25 mb-3">
-            <Zap className="w-5 h-5 fill-white" />
-          </div>
+          <img
+            src="/logo.png"
+            alt="WP-Automation"
+            className="h-14 sm:h-16 max-w-[280px] w-auto mx-auto mb-5 object-contain drop-shadow-xs"
+          />
           <h2 className="text-xl font-bold tracking-tight text-slate-900 dark:text-zinc-100">
             {mode === 'login' && 'Sign in to your account'}
             {mode === 'register' && 'Create an account'}

@@ -98,25 +98,26 @@ apiClient.interceptors.response.use(
           isRefreshing = true;
 
           try {
-            // Call POST {{baseUrl}}/auth/refresh with { refreshToken }
-            const refreshResponse = await axios.post<{
-              accessToken?: string;
-              access_token?: string;
-              refreshToken?: string;
-              refresh_token?: string;
-              data?: {
-                accessToken?: string;
-                access_token?: string;
-                refreshToken?: string;
-                refresh_token?: string;
-              };
-            }>(`${BASE_URL}${API_ENDPOINTS.AUTH.REFRESH}`, {
-              refreshToken: storedRefreshToken,
-            });
+            // Call POST {{baseUrl}}/auth/refresh with { refreshToken, refresh_token }
+            const refreshResponse = await axios.post<any>(
+              `${BASE_URL}${API_ENDPOINTS.AUTH.REFRESH}`,
+              {
+                refreshToken: storedRefreshToken,
+                refresh_token: storedRefreshToken,
+              }
+            );
 
-            const resData = refreshResponse.data?.data || refreshResponse.data;
-            const newAccessToken = resData.accessToken || resData.access_token;
-            const newRefreshToken = resData.refreshToken || resData.refresh_token;
+            const resData = refreshResponse.data?.data || refreshResponse.data || {};
+            const newAccessToken =
+              resData.accessToken ||
+              resData.access_token ||
+              resData.tokens?.accessToken ||
+              resData.tokens?.access_token;
+            const newRefreshToken =
+              resData.refreshToken ||
+              resData.refresh_token ||
+              resData.tokens?.refreshToken ||
+              resData.tokens?.refresh_token;
 
             if (newAccessToken) {
               localStorage.setItem(TOKEN_STORAGE_KEY, newAccessToken);

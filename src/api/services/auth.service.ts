@@ -14,18 +14,85 @@ import type {
   UserSessionDto,
 } from '../types/auth.dto';
 
+/**
+ * Universal normalizer for user profile payloads across diverse NestJS/Express formats.
+ * Handles nested wrappers: data.user, data.profile, data, user, profile, and various key namings.
+ */
+export function normalizeUserProfile(raw: any): UserProfileDto | null {
+  if (!raw || typeof raw !== 'object') return null;
+
+  // Unpack nested response wrappers
+  const candidate =
+    raw.user ||
+    raw.data?.user ||
+    raw.data?.profile ||
+    raw.profile ||
+    raw.data ||
+    raw;
+
+  const actual = candidate.user || candidate.profile || candidate;
+  if (!actual || typeof actual !== 'object') return null;
+
+  const email = actual.email || actual.userEmail || actual.emailAddress || '';
+  const fullName =
+    actual.fullName ||
+    actual.name ||
+    actual.displayName ||
+    actual.username ||
+    actual.userName ||
+    (actual.firstName && actual.lastName
+      ? `${actual.firstName} ${actual.lastName}`.trim()
+      : actual.firstName || actual.lastName) ||
+    (email ? email.split('@')[0] : '');
+
+  const id = actual.id || actual._id || actual.userId || actual.sub || '';
+  const role = actual.role || actual.userRole || actual.roles?.[0] || 'Editor';
+  const profileImage =
+    actual.profileImage ||
+    actual.avatar ||
+    actual.avatarUrl ||
+    actual.picture ||
+    '';
+
+  return {
+    id: id ? String(id) : undefined,
+    email,
+    fullName,
+    name: fullName,
+    role,
+    profileImage,
+    createdAt: actual.createdAt,
+    updatedAt: actual.updatedAt,
+  };
+}
+
 // Helper to extract access token from various NestJS response shapes
-function extractTokensAndUser(raw: AuthResponseDto): {
+function extractTokensAndUser(raw: any): {
   accessToken: string;
   refreshToken?: string;
   user?: UserProfileDto;
 } {
-  const root = raw.data || raw;
-  const accessToken = root.accessToken || root.access_token || '';
-  const refreshToken = root.refreshToken || root.refresh_token;
-  const user = root.user;
+  const root = raw?.data || raw || {};
+  const accessToken =
+    root.accessToken ||
+    root.access_token ||
+    raw?.accessToken ||
+    raw?.access_token ||
+    root.tokens?.accessToken ||
+    root.tokens?.access_token ||
+    '';
 
-  return { accessToken, refreshToken, user };
+  const refreshToken =
+    root.refreshToken ||
+    root.refresh_token ||
+    raw?.refreshToken ||
+    raw?.refresh_token ||
+    root.tokens?.refreshToken ||
+    root.tokens?.refresh_token;
+
+  const user = normalizeUserProfile(raw);
+
+  return { accessToken, refreshToken, user: user || undefined };
 }
 
 export const authService = {
@@ -48,9 +115,18 @@ export const authService = {
     if (refreshToken) {
       localStorage.setItem(REFRESH_TOKEN_STORAGE_KEY, refreshToken);
     }
-    if (user) {
-      localStorage.setItem(USER_STORAGE_KEY, JSON.stringify(user));
-    }
+
+    // Always ensure a valid user with the login email is saved in storage
+    const resolvedUser: UserProfileDto = (user && user.email)
+      ? user
+      : {
+          email: payload.email,
+          fullName: payload.email.split('@')[0],
+          name: payload.email.split('@')[0],
+          role: 'Editor',
+        };
+
+    localStorage.setItem(USER_STORAGE_KEY, JSON.stringify(resolvedUser));
 
     return response.data;
   },
@@ -75,9 +151,17 @@ export const authService = {
     if (refreshToken) {
       localStorage.setItem(REFRESH_TOKEN_STORAGE_KEY, refreshToken);
     }
-    if (user) {
-      localStorage.setItem(USER_STORAGE_KEY, JSON.stringify(user));
-    }
+
+    const resolvedUser: UserProfileDto = (user && user.email)
+      ? user
+      : {
+          email: payload.email,
+          fullName: payload.fullName || payload.email.split('@')[0],
+          name: payload.fullName || payload.email.split('@')[0],
+          role: 'Editor',
+        };
+
+    localStorage.setItem(USER_STORAGE_KEY, JSON.stringify(resolvedUser));
 
     return response.data;
   },
@@ -113,12 +197,24 @@ export const authService = {
     const response = await apiClient.get<UserProfileDto | { data: UserProfileDto }>(
       API_ENDPOINTS.AUTH.ME
     );
-    const data: any = response.data;
-    const user = data?.data || data;
-    if (user) {
-      localStorage.setItem(USER_STORAGE_KEY, JSON.stringify(user));
+    const normalized = normalizeUserProfile(response.data);
+    if (normalized && normalized.email) {
+      // Merge with existing cached user so we preserve any locally known properties
+      const existing = this.getCachedUser();
+      const merged: UserProfileDto = {
+        id: normalized.id || existing?.id,
+        email: normalized.email,
+        fullName: normalized.fullName || existing?.fullName || normalized.email.split('@')[0],
+        name: normalized.fullName || existing?.fullName || normalized.email.split('@')[0],
+        role: normalized.role || existing?.role || 'Editor',
+        profileImage: normalized.profileImage || existing?.profileImage || '',
+      };
+      localStorage.setItem(USER_STORAGE_KEY, JSON.stringify(merged));
+      return merged;
     }
-    return user;
+    // Fallback: if server returned unparseable structure, return whatever was cached or raw
+    const cached = this.getCachedUser();
+    return cached || (response.data as any);
   },
 
   /**

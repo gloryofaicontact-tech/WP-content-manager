@@ -923,7 +923,7 @@ export const SettingsScreen: React.FC = () => {
                   </span>
                 </div>
                 <p className="text-xs text-slate-500 dark:text-zinc-400 font-mono">
-                  {currentUser?.email || 'admin@example.com'}
+                  {currentUser?.email || ''}
                 </p>
               </div>
             </div>

@@ -1,7 +1,7 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import type { WordPressSite } from '../types/wordpress';
 import { mockDefaultContentTypes } from '../data/mockSites';
-import { authService } from '../api/services/auth.service';
+import { authService, normalizeUserProfile } from '../api/services/auth.service';
 import { websitesService } from '../api/services/websites.service';
 import { usersService } from '../api/services/users.service';
 import { USER_STORAGE_KEY } from '../api/client';
@@ -89,32 +89,36 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [currentUser, setCurrentUser] = useState<UserProfile | null>(() => {
     const cached = authService.getCachedUser();
     if (cached) {
-      return {
-        id: cached.id,
-        fullName: cached.fullName || cached.name || 'User',
-        email: cached.email,
-        role: cached.role || 'Editor',
-        profileImage: cached.profileImage || (cached as any).avatar || '',
-      };
+      const normalized = normalizeUserProfile(cached);
+      if (normalized && normalized.email) {
+        return {
+          id: normalized.id,
+          fullName: normalized.fullName || normalized.email.split('@')[0],
+          email: normalized.email,
+          role: normalized.role || 'Editor',
+          profileImage: normalized.profileImage || '',
+        };
+      }
     }
     return null;
   });
   const [authMode, setAuthMode] = useState<'login' | 'register'>('login');
 
-  // Validate session with NestJS on mount if token exists
+  // Validate and sync user profile with NestJS backend on mount if token exists
   useEffect(() => {
     if (authService.hasToken()) {
       authService
         .getProfile()
         .then(profile => {
-          if (profile) {
-            setCurrentUser({
-              id: profile.id,
-              fullName: profile.fullName || profile.name || 'User',
-              email: profile.email,
-              role: profile.role || 'Editor',
-              profileImage: profile.profileImage || (profile as any).avatar || '',
-            });
+          const normalized = normalizeUserProfile(profile);
+          if (normalized && normalized.email) {
+            setCurrentUser(prev => ({
+              id: normalized.id || prev?.id,
+              fullName: normalized.fullName || prev?.fullName || normalized.email.split('@')[0],
+              email: normalized.email,
+              role: normalized.role || prev?.role || 'Editor',
+              profileImage: normalized.profileImage || prev?.profileImage || '',
+            }));
             setIsAuthenticated(true);
           }
         })
@@ -126,6 +130,23 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           }
         });
     }
+  }, []);
+
+  // Listen for unauthorized 401 events dispatched from axios interceptor
+  useEffect(() => {
+    const handleUnauthorized = () => {
+      setIsAuthenticated(false);
+      setCurrentUser(null);
+      setAuthMode('login');
+      addToast({
+        title: 'Session Expired',
+        message: 'Your authentication session has expired. Please sign in again.',
+        type: 'warning',
+      });
+    };
+
+    window.addEventListener('auth:unauthorized', handleUnauthorized);
+    return () => window.removeEventListener('auth:unauthorized', handleUnauthorized);
   }, []);
 
   // Application State
@@ -284,18 +305,39 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     try {
       const response = await authService.login(data);
       const root = response.data || response;
-      const userObj = root.user;
+      const normalized = normalizeUserProfile(root);
 
       const user: UserProfile = {
-        id: userObj?.id,
-        fullName: userObj?.fullName || userObj?.name || (data.email.includes('editor') ? 'John Editor' : 'User'),
-        email: userObj?.email || data.email,
-        role: userObj?.role || 'Editor',
+        id: normalized?.id,
+        fullName:
+          normalized?.fullName ||
+          (data.email.includes('editor') ? 'John Editor' : data.email.split('@')[0]),
+        email: normalized?.email || data.email,
+        role: normalized?.role || 'Editor',
+        profileImage: normalized?.profileImage || '',
       };
 
       setCurrentUser(user);
+      localStorage.setItem(USER_STORAGE_KEY, JSON.stringify(user));
       setIsAuthenticated(true);
       setCurrentScreen('dashboard');
+
+      // Fetch fresh profile from /auth/me in background to get server-verified details
+      authService
+        .getProfile()
+        .then(profile => {
+          const fresh = normalizeUserProfile(profile);
+          if (fresh && fresh.email) {
+            setCurrentUser(prev => ({
+              id: fresh.id || prev?.id,
+              fullName: fresh.fullName || prev?.fullName || fresh.email.split('@')[0],
+              email: fresh.email,
+              role: fresh.role || prev?.role || 'Editor',
+              profileImage: fresh.profileImage || prev?.profileImage || '',
+            }));
+          }
+        })
+        .catch(() => {});
 
       addToast({
         title: 'Welcome Back!',
@@ -321,18 +363,37 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     try {
       const response = await authService.register(data);
       const root = response.data || response;
-      const userObj = root.user;
+      const normalized = normalizeUserProfile(root);
 
       const user: UserProfile = {
-        id: userObj?.id,
-        fullName: userObj?.fullName || data.fullName,
-        email: userObj?.email || data.email,
-        role: userObj?.role || 'Editor',
+        id: normalized?.id,
+        fullName: normalized?.fullName || data.fullName || data.email.split('@')[0],
+        email: normalized?.email || data.email,
+        role: normalized?.role || 'Editor',
+        profileImage: normalized?.profileImage || '',
       };
 
       setCurrentUser(user);
+      localStorage.setItem(USER_STORAGE_KEY, JSON.stringify(user));
       setIsAuthenticated(true);
       setCurrentScreen('dashboard');
+
+      // Fetch fresh profile from /auth/me in background
+      authService
+        .getProfile()
+        .then(profile => {
+          const fresh = normalizeUserProfile(profile);
+          if (fresh && fresh.email) {
+            setCurrentUser(prev => ({
+              id: fresh.id || prev?.id,
+              fullName: fresh.fullName || prev?.fullName || fresh.email.split('@')[0],
+              email: fresh.email,
+              role: fresh.role || prev?.role || 'Editor',
+              profileImage: fresh.profileImage || prev?.profileImage || '',
+            }));
+          }
+        })
+        .catch(() => {});
 
       addToast({
         title: 'Account Created Successfully!',

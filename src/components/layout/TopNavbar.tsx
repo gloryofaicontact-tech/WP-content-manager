@@ -317,16 +317,21 @@ export const TopNavbar: React.FC = () => {
                   .map(n => n[0])
                   .join('')
                   .toUpperCase()
+                : currentUser?.email
+                ? currentUser.email[0].toUpperCase()
                 : 'U'}
             </div>
           )}
 
           <div className="hidden xl:block text-left">
-            <span className="text-xs font-bold text-slate-800 dark:text-zinc-200 block leading-tight truncate max-w-[120px]">
-              {currentUser?.fullName || 'User'}
+            <span className="text-xs font-bold text-slate-800 dark:text-zinc-200 block leading-tight truncate max-w-[140px]">
+              {currentUser?.fullName || (currentUser?.email ? currentUser.email.split('@')[0] : 'User')}
             </span>
-            <span className="text-[10px] text-slate-500 font-mono block truncate max-w-[120px]">
-              {currentUser?.email || 'admin@quicksite.asia'}
+            <span
+              className="text-[10px] text-slate-500 font-mono block truncate max-w-[140px]"
+              title={currentUser?.email || ''}
+            >
+              {currentUser?.email || ''}
             </span>
           </div>
 

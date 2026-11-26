@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useArticles } from '../../../context/ArticleContext';
 import { useApp } from '../../../context/AppContext';
 import { websitesService } from '../../../api/services/websites.service';
@@ -55,63 +55,112 @@ export const ArticlesListScreen: React.FC = () => {
 
   // -------------------------------------------------------------
   // TAB 1: Website Articles State (Drafts & Published)
-  // GET {{baseUrl}}/websites/:websiteId/articles?page=1&limit=10
+  // Loaded once per site, filtered instantly in frontend
   // -------------------------------------------------------------
-  const [websiteArticles, setWebsiteArticles] = useState<ProcessedArticleDataDto[]>([]);
+  const [rawWebsiteArticles, setRawWebsiteArticles] = useState<ProcessedArticleDataDto[]>([]);
   const [isLoadingWebsiteArticles, setIsLoadingWebsiteArticles] = useState(false);
   const [websiteArticleStatusFilter, setWebsiteArticleStatusFilter] = useState<string>('ALL');
   const [websiteArticleSearchInput, setWebsiteArticleSearchInput] = useState<string>('');
-  const [websiteArticlesPagination, setWebsiteArticlesPagination] = useState({
-    page: 1,
-    limit: 10,
-    total: 0,
-    lastPage: 1,
-  });
+  const [currentPage, setCurrentPage] = useState<number>(1);
+  const pageSize = 10;
 
   const [togglingArticleId, setTogglingArticleId] = useState<string | null>(null);
   const [deletingWebsiteArticleId, setDeletingWebsiteArticleId] = useState<string | null>(null);
   const [articleToDelete, setArticleToDelete] = useState<{ id: string; title: string } | null>(null);
 
+  // Canonical helper detecting whether an article is Published (Live) vs Draft across all naming conventions
+  const isArticlePublished = (art: ProcessedArticleDataDto | any): boolean => {
+    if (!art) return false;
+
+    // 1. Explicit boolean checks
+    if (art.isPublished === true || art.published === true || art.isLive === true || art.live === true) {
+      return true;
+    }
+
+    // 2. String status candidates across various backend naming conventions
+    const candidates = [
+      art.wpStatus,
+      art.status,
+      art.post_status,
+      art.postStatus,
+      art.workflowStatus,
+      art.workflow_status,
+      art.state,
+    ];
+
+    for (const c of candidates) {
+      if (typeof c === 'string') {
+        const val = c.trim().toLowerCase();
+        if (val === 'publish' || val === 'published' || val === 'live' || val === 'public') {
+          return true;
+        }
+      }
+    }
+
+    // 3. Live preview URL check
+    if (art.publishedUrl || art.liveUrl) {
+      return true;
+    }
+
+    return false;
+  };
+
+  // Dynamic live & draft counts for quick filters
+  const liveCount = useMemo(() => {
+    return rawWebsiteArticles.filter(isArticlePublished).length;
+  }, [rawWebsiteArticles]);
+
+  const draftCount = useMemo(() => {
+    return rawWebsiteArticles.length - liveCount;
+  }, [rawWebsiteArticles, liveCount]);
+
+  // Instant In-Memory Frontend Filtering
+  const displayedWebsiteArticles = useMemo(() => {
+    let result = rawWebsiteArticles;
+
+    // Filter by Search Query
+    const search = websiteArticleSearchInput.trim().toLowerCase();
+    if (search) {
+      result = result.filter(art => {
+        const title = (typeof art.title === 'string' ? art.title : (art.title as any)?.rendered || '').toLowerCase();
+        const slug = (art.slug || '').toLowerCase();
+        const keyword = (art.focusKeyword || '').toLowerCase();
+        const contentType = (art.contentTypeName || art.contentTypeSlug || '').toLowerCase();
+        return (
+          title.includes(search) ||
+          slug.includes(search) ||
+          keyword.includes(search) ||
+          contentType.includes(search)
+        );
+      });
+    }
+
+    // Filter by Status: 'ALL' | 'live' | 'publish' | 'draft'
+    if (websiteArticleStatusFilter === 'live' || websiteArticleStatusFilter === 'publish') {
+      result = result.filter(art => isArticlePublished(art));
+    } else if (websiteArticleStatusFilter === 'draft') {
+      result = result.filter(art => !isArticlePublished(art));
+    }
+
+    return result;
+  }, [rawWebsiteArticles, websiteArticleStatusFilter, websiteArticleSearchInput]);
+
+  // Client-Side Pagination for instant navigation
+  const totalPages = Math.max(1, Math.ceil(displayedWebsiteArticles.length / pageSize));
+  const paginatedArticles = useMemo<ProcessedArticleDataDto[]>(() => {
+    return displayedWebsiteArticles.slice((currentPage - 1) * pageSize, currentPage * pageSize);
+  }, [displayedWebsiteArticles, currentPage]);
+
+  // Reset page to 1 whenever filter or search query changes
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [websiteArticleStatusFilter, websiteArticleSearchInput]);
+
   // Load Website Articles: GET /websites/:websiteId/articles
-  const loadWebsiteArticles = async (
-    page = websiteArticlesPagination.page,
-    status = websiteArticleStatusFilter,
-    search = websiteArticleSearchInput
-  ) => {
+  const loadWebsiteArticles = async () => {
     if (!activeSite?.id) return;
     setIsLoadingWebsiteArticles(true);
     try {
-      // Map filter selection cleanly without restricting workflowStatus to IMPORTED
-      let mappedStatus: string | undefined = undefined;
-      let mappedWorkflowStatus: string | undefined = undefined;
-
-      if (status === 'draft') {
-        mappedStatus = 'draft';
-      } else if (status === 'publish' || status === 'PUBLISHED') {
-        mappedWorkflowStatus = 'PUBLISHED';
-        mappedStatus = 'publish';
-      } else if (['IMPORTED', 'ENHANCING', 'READY_FOR_REVIEW'].includes(status.toUpperCase())) {
-        mappedWorkflowStatus = status.toUpperCase();
-      }
-
-      console.log('[loadWebsiteArticles] Fetching articles for site:', activeSite.id, {
-        page,
-        status,
-        mappedWorkflowStatus,
-        mappedStatus,
-      });
-
-      // Call primary endpoint: GET /websites/:websiteId/articles
-      const res = await websitesService.getWebsiteArticles(activeSite.id, {
-        page,
-        limit: 10,
-        workflowStatus: mappedWorkflowStatus,
-        status: mappedStatus,
-        search: search.trim() || undefined,
-      });
-
-      console.log('[loadWebsiteArticles] Primary response:', res);
-
       // Robust multi-key extractor for arrays
       const extractList = (raw: any): any[] => {
         if (!raw) return [];
@@ -140,30 +189,24 @@ export const ArticlesListScreen: React.FC = () => {
         return [];
       };
 
+      // Call primary endpoint: GET /websites/:websiteId/articles without status filter
+      const res = await websitesService.getWebsiteArticles(activeSite.id, {
+        page: 1,
+        limit: 100,
+      });
       let list = extractList(res);
-      let total =
-        (res?.data && typeof res.data === 'object' && typeof res.data.total === 'number' && res.data.total) ||
-        (res?.data && typeof res.data === 'object' && typeof res.data.totalItems === 'number' && res.data.totalItems) ||
-        (res?.data && typeof res.data === 'object' && res.data.meta?.total) ||
-        (res?.data && typeof res.data === 'object' && res.data.meta?.totalItems) ||
-        (res as any)?.meta?.total ||
-        (res as any)?.meta?.totalItems ||
-        (res as any)?.total ||
-        list.length;
 
-      // Smart Fallback: If primary returned empty, also check GET /articles?websiteId=:id
-      if (list.length === 0 && (!search || !search.trim())) {
+      // Fallback: If primary returned empty, also check GET /articles?websiteId=:id
+      if (list.length === 0) {
         try {
           const fallbackRes = await articlesService.getArticles({
             websiteId: activeSite.id,
-            page,
-            limit: 10,
+            page: 1,
+            limit: 100,
           });
           const fallbackList = extractList(fallbackRes);
           if (fallbackList.length > 0) {
-            console.log('[loadWebsiteArticles] Fallback /articles returned:', fallbackList);
             list = fallbackList;
-            total = fallbackList.length;
           }
         } catch {
           // Ignore fallback error
@@ -171,53 +214,35 @@ export const ArticlesListScreen: React.FC = () => {
       }
 
       // Normalize all items to ensure consistent ProcessedArticleDataDto shape
-      const normalizedList: ProcessedArticleDataDto[] = list.map((item: any, idx: number) => ({
-        id: String(item.id || item._id || `art-${idx + 1}`),
-        websiteId: item.websiteId || activeSite.id,
-        contentTypeSlug:
-          item.contentTypeSlug || item.contentType?.slug || item.postType || 'post',
-        contentTypeName:
-          item.contentTypeName || item.contentType?.name || item.contentTypeSlug || 'Article',
-        title: typeof item.title === 'object' ? item.title.rendered : (item.title || 'Untitled Article'),
-        slug: item.slug || (typeof item.title === 'string' ? item.title.toLowerCase().replace(/[^a-z0-9]+/g, '-') : 'article'),
-        focusKeyword: item.focusKeyword || item.targetKeyword || '',
-        metaDescription: item.metaDescription || item.excerpt || '',
-        contentHtml: item.contentHtml || item.rawContent || (typeof item.content === 'object' ? item.content.rendered : item.content) || '',
-        workflowStatus: item.workflowStatus || (item.wpStatus === 'publish' || item.status === 'publish' ? 'PUBLISHED' : 'READY_FOR_REVIEW'),
-        wpStatus: (item.wpStatus || item.status || 'draft').toLowerCase(),
-        featuredMediaUrl: item.featuredMediaUrl || item.featuredImage || item.featuredMedia?.sourceUrl || null,
-        images: Array.isArray(item.images) ? item.images : [],
-        createdAt: item.createdAt || item.date || new Date().toISOString(),
-        updatedAt: item.updatedAt || item.modified || new Date().toISOString(),
-        publishedUrl: item.publishedUrl || item.wpUrl || item.link || null,
-      }));
+      const normalizedList: ProcessedArticleDataDto[] = list.map((item: any, idx: number) => {
+        const published = isArticlePublished(item);
 
-      // Apply client-side filter if specific status is selected
-      let filteredList = normalizedList;
-      if (status === 'draft') {
-        filteredList = normalizedList.filter(a => {
-          const s = (a.wpStatus || '').toLowerCase();
-          const ws = (a.workflowStatus || '').toUpperCase();
-          return s === 'draft' || ws !== 'PUBLISHED';
-        });
-      } else if (status === 'publish') {
-        filteredList = normalizedList.filter(a => {
-          const s = (a.wpStatus || '').toLowerCase();
-          const ws = (a.workflowStatus || '').toUpperCase();
-          return s === 'publish' || ws === 'PUBLISHED';
-        });
-      }
-
-      setWebsiteArticles(filteredList);
-      setWebsiteArticlesPagination({
-        page,
-        limit: 10,
-        total: total || filteredList.length,
-        lastPage: Math.max(1, Math.ceil((total || filteredList.length) / 10)),
+        return {
+          id: String(item.id || item._id || `art-${idx + 1}`),
+          websiteId: item.websiteId || activeSite.id,
+          contentTypeSlug:
+            item.contentTypeSlug || item.contentType?.slug || item.postType || 'post',
+          contentTypeName:
+            item.contentTypeName || item.contentType?.name || item.contentTypeSlug || 'Article',
+          title: typeof item.title === 'object' ? item.title.rendered : (item.title || 'Untitled Article'),
+          slug: item.slug || (typeof item.title === 'string' ? item.title.toLowerCase().replace(/[^a-z0-9]+/g, '-') : 'article'),
+          focusKeyword: item.focusKeyword || item.targetKeyword || '',
+          metaDescription: item.metaDescription || item.excerpt || '',
+          contentHtml: item.contentHtml || item.rawContent || (typeof item.content === 'object' ? item.content.rendered : item.content) || '',
+          workflowStatus: published ? 'PUBLISHED' : (item.workflowStatus || 'READY_FOR_REVIEW'),
+          wpStatus: published ? 'publish' : 'draft',
+          featuredMediaUrl: item.featuredMediaUrl || item.featuredImage || item.featuredMedia?.sourceUrl || null,
+          images: Array.isArray(item.images) ? item.images : [],
+          createdAt: item.createdAt || item.date || new Date().toISOString(),
+          updatedAt: item.updatedAt || item.modified || new Date().toISOString(),
+          publishedUrl: item.publishedUrl || item.wpUrl || item.link || null,
+        };
       });
+
+      setRawWebsiteArticles(normalizedList);
     } catch (err: any) {
       console.error('[loadWebsiteArticles] Error:', err);
-      setWebsiteArticles([]);
+      setRawWebsiteArticles([]);
     } finally {
       setIsLoadingWebsiteArticles(false);
     }
@@ -226,8 +251,26 @@ export const ArticlesListScreen: React.FC = () => {
   // Toggle Switch between "publish" and "draft": POST /websites/:websiteId/articles/:articleId/publish
   const handleToggleArticleStatus = async (art: ProcessedArticleDataDto) => {
     if (!activeSite?.id) return;
-    const isCurrentlyPublished = art.wpStatus === 'publish' || art.workflowStatus === 'PUBLISHED';
+    const isCurrentlyPublished = isArticlePublished(art);
     const nextStatus = isCurrentlyPublished ? 'draft' : 'publish';
+
+    // Optimistically update article status in frontend list immediately
+    setRawWebsiteArticles(prev =>
+      prev.map(a =>
+        a.id === art.id
+          ? {
+              ...a,
+              wpStatus: nextStatus,
+              status: nextStatus,
+              workflowStatus: nextStatus === 'publish' ? 'PUBLISHED' : 'READY_FOR_REVIEW',
+              published: nextStatus === 'publish',
+              isPublished: nextStatus === 'publish',
+              isLive: nextStatus === 'publish',
+              live: nextStatus === 'publish',
+            }
+          : a
+      )
+    );
 
     setTogglingArticleId(art.id);
     try {
@@ -242,10 +285,25 @@ export const ArticlesListScreen: React.FC = () => {
             : `"${art.title}" status changed back to draft.`,
         type: 'success',
       });
-      // Refresh list & counts
-      loadWebsiteArticles(websiteArticlesPagination.page);
       refreshActiveSiteArticlesCount(activeSite.id);
     } catch (err: any) {
+      // Revert optimistic update on failure
+      setRawWebsiteArticles(prev =>
+        prev.map(a =>
+          a.id === art.id
+            ? {
+                ...a,
+                wpStatus: isCurrentlyPublished ? 'publish' : 'draft',
+                status: isCurrentlyPublished ? 'publish' : 'draft',
+                workflowStatus: isCurrentlyPublished ? 'PUBLISHED' : 'READY_FOR_REVIEW',
+                published: isCurrentlyPublished,
+                isPublished: isCurrentlyPublished,
+                isLive: isCurrentlyPublished,
+                live: isCurrentlyPublished,
+              }
+            : a
+        )
+      );
       addToast({
         title: 'Status Update Failed',
         message: err.message || 'Could not update article status on WordPress.',
@@ -273,7 +331,7 @@ export const ArticlesListScreen: React.FC = () => {
         type: 'info',
       });
       setArticleToDelete(null);
-      loadWebsiteArticles(websiteArticlesPagination.page);
+      setRawWebsiteArticles(prev => prev.filter(a => a.id !== articleId));
       refreshActiveSiteArticlesCount(activeSite.id);
     } catch (err: any) {
       addToast({
@@ -289,16 +347,17 @@ export const ArticlesListScreen: React.FC = () => {
   // Trigger loads when tab or site changes
   useEffect(() => {
     if (activeTab === 'website-articles') {
-      loadWebsiteArticles(1, websiteArticleStatusFilter, websiteArticleSearchInput);
+      loadWebsiteArticles();
     } else if (activeTab === 'live') {
       loadLiveArticles(activeSite?.id, undefined, searchInput, 1);
     }
-  }, [activeTab, activeSite?.id, websiteArticleStatusFilter]);
+  }, [activeTab, activeSite?.id]);
 
   const handleSearchSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (activeTab === 'website-articles') {
-      loadWebsiteArticles(1, websiteArticleStatusFilter, websiteArticleSearchInput);
+      // In-memory filter handles instant search, reset page to 1
+      setCurrentPage(1);
     } else {
       setFilters(prev => ({ ...prev, searchQuery: searchInput }));
       loadLiveArticles(activeSite?.id, undefined, searchInput, 1);
@@ -308,7 +367,7 @@ export const ArticlesListScreen: React.FC = () => {
   const handleClearSearch = () => {
     if (activeTab === 'website-articles') {
       setWebsiteArticleSearchInput('');
-      loadWebsiteArticles(1, websiteArticleStatusFilter, '');
+      setCurrentPage(1);
     } else {
       setSearchInput('');
       setFilters(prev => ({ ...prev, searchQuery: '' }));
@@ -352,7 +411,7 @@ export const ArticlesListScreen: React.FC = () => {
         setSelectedRecord({ ...selectedRecord, hasSnapshot: true });
       }
       // Refresh website articles
-      loadWebsiteArticles(websiteArticlesPagination.page);
+      loadWebsiteArticles();
       if (activeSite?.id) refreshActiveSiteArticlesCount(activeSite.id);
     } finally {
       setIngestingId(null);
@@ -361,7 +420,7 @@ export const ArticlesListScreen: React.FC = () => {
 
   const handleRefreshCurrentTab = () => {
     if (activeTab === 'website-articles') {
-      loadWebsiteArticles(websiteArticlesPagination.page);
+      loadWebsiteArticles();
     } else {
       loadLiveArticles();
     }
@@ -414,7 +473,7 @@ export const ArticlesListScreen: React.FC = () => {
 
       {/* 2 Navigation Tabs: Streamlined per user request */}
       <div className="flex items-center gap-1.5 p-1 rounded-2xl bg-slate-100 dark:bg-zinc-950 border border-slate-200 dark:border-zinc-800 w-fit max-w-full overflow-x-auto shadow-2xs">
-        {/* TAB 1: Website Articles (Drafts & Published) */}
+        {/* TAB 1: Site Articles & Drafts */}
         <button
           onClick={() => setActiveTab('website-articles')}
           className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-semibold transition-all cursor-pointer shrink-0 ${
@@ -424,9 +483,9 @@ export const ArticlesListScreen: React.FC = () => {
           }`}
         >
           <FileText className="w-4 h-4" />
-          <span>Website Articles (Drafts & Published)</span>
+          <span>Articles & Drafts</span>
           <span className="px-2 py-0.5 rounded-md bg-white/20 text-[10px] font-mono font-bold">
-            {websiteArticlesPagination.total}
+            {rawWebsiteArticles.length}
           </span>
         </button>
 
@@ -440,19 +499,19 @@ export const ArticlesListScreen: React.FC = () => {
           }`}
         >
           <Globe className="w-4 h-4" />
-          <span>Live WordPress Content</span>
+          <span>Live WP Content</span>
           <span className="px-2 py-0.5 rounded-md bg-white/20 text-[10px] font-mono font-bold">
             {pagination.totalItems || filteredArticles.length}
           </span>
         </button>
       </div>
 
-      {/* ================= TAB 1: WEBSITE ARTICLES (DRAFTS & PUBLISHED) ================= */}
+      {/* ================= TAB 1: ARTICLES & DRAFTS ================= */}
       {activeTab === 'website-articles' && (
         <div className="space-y-4">
           {/* Responsive Filter Bar */}
           <div className="p-3.5 sm:p-4 rounded-2xl bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-3">
-            <form onSubmit={handleSearchSubmit} className="flex flex-wrap items-center gap-3 flex-1">
+            <div className="flex flex-wrap items-center gap-3 flex-1">
               <div className="relative min-w-[220px] flex-1 max-w-md">
                 <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
                 <input
@@ -466,36 +525,56 @@ export const ArticlesListScreen: React.FC = () => {
                   <button
                     type="button"
                     onClick={handleClearSearch}
-                    className="absolute right-12 top-1/2 -translate-y-1/2 text-[10px] font-mono text-slate-400 hover:text-slate-600 dark:hover:text-zinc-200 cursor-pointer"
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-[10px] font-mono text-slate-400 hover:text-slate-600 dark:hover:text-zinc-200 cursor-pointer"
                   >
                     Clear
                   </button>
                 )}
+              </div>
+
+              {/* Status Filter Interactive Pills */}
+              <div className="flex items-center p-0.5 rounded-xl bg-slate-100 dark:bg-zinc-950 border border-slate-200 dark:border-zinc-800 shrink-0">
                 <button
-                  type="submit"
-                  className="absolute right-2 top-1/2 -translate-y-1/2 px-2 py-0.5 rounded-lg bg-violet-600 text-white text-[10px] font-semibold cursor-pointer hover:bg-violet-700"
+                  type="button"
+                  onClick={() => setWebsiteArticleStatusFilter('ALL')}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
+                    websiteArticleStatusFilter === 'ALL'
+                      ? 'bg-white dark:bg-zinc-800 text-slate-900 dark:text-zinc-100 shadow-2xs'
+                      : 'text-slate-500 hover:text-slate-900 dark:hover:text-zinc-200'
+                  }`}
                 >
-                  Search
+                  All ({rawWebsiteArticles.length})
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setWebsiteArticleStatusFilter('live')}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer flex items-center gap-1.5 ${
+                    websiteArticleStatusFilter === 'live' || websiteArticleStatusFilter === 'publish'
+                      ? 'bg-white dark:bg-zinc-800 text-emerald-600 dark:text-emerald-400 shadow-2xs'
+                      : 'text-slate-500 hover:text-slate-900 dark:hover:text-zinc-200'
+                  }`}
+                >
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+                  Live ({liveCount})
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setWebsiteArticleStatusFilter('draft')}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer flex items-center gap-1.5 ${
+                    websiteArticleStatusFilter === 'draft'
+                      ? 'bg-white dark:bg-zinc-800 text-amber-600 dark:text-amber-400 shadow-2xs'
+                      : 'text-slate-500 hover:text-slate-900 dark:hover:text-zinc-200'
+                  }`}
+                >
+                  <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />
+                  Drafts ({draftCount})
                 </button>
               </div>
+            </div>
 
-              {/* Status Filter Dropdown */}
-              <div className="flex items-center gap-2 text-xs text-slate-500 shrink-0">
-                <span className="font-medium">Filter:</span>
-                <select
-                  value={websiteArticleStatusFilter}
-                  onChange={e => setWebsiteArticleStatusFilter(e.target.value)}
-                  className="px-3 py-1.5 rounded-xl bg-slate-50 dark:bg-zinc-950 border border-slate-200 dark:border-zinc-800 text-xs font-medium text-slate-800 dark:text-zinc-200 cursor-pointer outline-none focus:border-violet-500"
-                >
-                  <option value="ALL">All Statuses</option>
-                  <option value="draft">Drafts Only</option>
-                  <option value="publish">Published Only</option>
-                </select>
-              </div>
-            </form>
-
-            <span className="text-xs font-mono text-slate-400 self-end md:self-auto">
-              Showing {websiteArticles.length} of {websiteArticlesPagination.total} records
+            <span className="text-xs font-mono text-slate-400 self-end md:self-auto shrink-0">
+              Showing {paginatedArticles.length} of {displayedWebsiteArticles.length} records
+              {websiteArticleStatusFilter !== 'ALL' && ` (filtered from ${rawWebsiteArticles.length})`}
             </span>
           </div>
 
@@ -523,12 +602,16 @@ export const ArticlesListScreen: React.FC = () => {
                         <span>Loading website articles from server...</span>
                       </td>
                     </tr>
-                  ) : websiteArticles.length === 0 ? (
+                  ) : paginatedArticles.length === 0 ? (
                     <tr>
                       <td colSpan={7} className="py-20 text-center text-slate-400">
                         <FileText className="w-10 h-10 mx-auto mb-2 text-slate-300 dark:text-zinc-700" />
                         <p className="font-semibold text-slate-700 dark:text-zinc-300 text-sm">No Articles Found</p>
-                        <p className="text-xs mt-1 text-slate-400">Process new articles or import content to get started.</p>
+                        <p className="text-xs mt-1 text-slate-400">
+                          {websiteArticleStatusFilter !== 'ALL'
+                            ? `No articles match status "${websiteArticleStatusFilter}".`
+                            : 'Process new articles or import content to get started.'}
+                        </p>
                         <Button
                           variant="glow"
                           size="xs"
@@ -541,9 +624,8 @@ export const ArticlesListScreen: React.FC = () => {
                       </td>
                     </tr>
                   ) : (
-                    websiteArticles.map(art => {
-                      const isPublished =
-                        art.wpStatus === 'publish' || art.workflowStatus === 'PUBLISHED';
+                    paginatedArticles.map((art: ProcessedArticleDataDto) => {
+                      const isPublished = isArticlePublished(art);
                       const liveUrl = art.publishedUrl || art.wpUrl || art.link;
 
                       return (
@@ -700,10 +782,15 @@ export const ArticlesListScreen: React.FC = () => {
                   <RefreshCw className="w-6 h-6 animate-spin mx-auto mb-2 text-violet-600" />
                   <p className="text-xs">Loading articles...</p>
                 </div>
-              ) : websiteArticles.length === 0 ? (
+              ) : paginatedArticles.length === 0 ? (
                 <div className="py-16 px-4 text-center text-slate-400">
                   <FileText className="w-10 h-10 mx-auto mb-2 text-slate-300 dark:text-zinc-700" />
                   <p className="font-semibold text-slate-700 dark:text-zinc-300 text-sm">No Articles Found</p>
+                  <p className="text-xs mt-1 text-slate-400">
+                    {websiteArticleStatusFilter !== 'ALL'
+                      ? `No articles match status "${websiteArticleStatusFilter}".`
+                      : 'Process new articles or import content to get started.'}
+                  </p>
                   <Button
                     variant="glow"
                     size="xs"
@@ -715,9 +802,8 @@ export const ArticlesListScreen: React.FC = () => {
                   </Button>
                 </div>
               ) : (
-                websiteArticles.map(art => {
-                  const isPublished =
-                    art.wpStatus === 'publish' || art.workflowStatus === 'PUBLISHED';
+                paginatedArticles.map((art: ProcessedArticleDataDto) => {
+                  const isPublished = isArticlePublished(art);
                   const liveUrl = art.publishedUrl || art.wpUrl || art.link;
 
                   return (
@@ -830,34 +916,37 @@ export const ArticlesListScreen: React.FC = () => {
             </div>
 
             {/* Pagination Footer */}
-            <div className="p-3.5 px-4 border-t border-slate-200 dark:border-zinc-800 flex flex-col sm:flex-row items-center justify-between gap-3 bg-slate-50/80 dark:bg-zinc-950/80">
-              <div className="text-xs text-slate-500 font-mono">
-                Showing Page <strong className="text-slate-900 dark:text-zinc-100">{websiteArticlesPagination.page}</strong> of{' '}
-                <strong className="text-slate-900 dark:text-zinc-100">{Math.max(1, websiteArticlesPagination.lastPage)}</strong> &bull; Total: <strong>{websiteArticlesPagination.total}</strong>
-              </div>
+            {displayedWebsiteArticles.length > pageSize && (
+              <div className="p-3.5 px-4 border-t border-slate-200 dark:border-zinc-800 flex flex-col sm:flex-row items-center justify-between gap-3 bg-slate-50/80 dark:bg-zinc-950/80">
+                <div className="text-xs text-slate-500 font-mono">
+                  Showing Page <strong className="text-slate-900 dark:text-zinc-100">{currentPage}</strong> of{' '}
+                  <strong className="text-slate-900 dark:text-zinc-100">{totalPages}</strong> &bull; Total Filtered:{' '}
+                  <strong>{displayedWebsiteArticles.length}</strong>
+                </div>
 
-              <div className="flex items-center gap-1.5">
-                <Button
-                  variant="outline"
-                  size="xs"
-                  onClick={() => loadWebsiteArticles(websiteArticlesPagination.page - 1)}
-                  disabled={websiteArticlesPagination.page <= 1 || isLoadingWebsiteArticles}
-                  icon={<ChevronLeft className="w-3.5 h-3.5" />}
-                >
-                  Previous
-                </Button>
+                <div className="flex items-center gap-1.5">
+                  <Button
+                    variant="outline"
+                    size="xs"
+                    onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                    disabled={currentPage <= 1 || isLoadingWebsiteArticles}
+                    icon={<ChevronLeft className="w-3.5 h-3.5" />}
+                  >
+                    Previous
+                  </Button>
 
-                <Button
-                  variant="glow"
-                  size="xs"
-                  onClick={() => loadWebsiteArticles(websiteArticlesPagination.page + 1)}
-                  disabled={websiteArticlesPagination.page >= websiteArticlesPagination.lastPage || isLoadingWebsiteArticles}
-                  icon={<ChevronRight className="w-3.5 h-3.5" />}
-                >
-                  Next
-                </Button>
+                  <Button
+                    variant="glow"
+                    size="xs"
+                    onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                    disabled={currentPage >= totalPages || isLoadingWebsiteArticles}
+                    icon={<ChevronRight className="w-3.5 h-3.5" />}
+                  >
+                    Next
+                  </Button>
+                </div>
               </div>
-            </div>
+            )}
           </div>
         </div>
       )}
