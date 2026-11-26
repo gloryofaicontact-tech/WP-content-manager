@@ -60,6 +60,7 @@ export const ArticlesListScreen: React.FC = () => {
   const [rawWebsiteArticles, setRawWebsiteArticles] = useState<ProcessedArticleDataDto[]>([]);
   const [isLoadingWebsiteArticles, setIsLoadingWebsiteArticles] = useState(false);
   const [websiteArticleStatusFilter, setWebsiteArticleStatusFilter] = useState<string>('ALL');
+  const [websiteArticlePostTypeFilter, setWebsiteArticlePostTypeFilter] = useState<string>('ALL');
   const [websiteArticleSearchInput, setWebsiteArticleSearchInput] = useState<string>('');
   const [currentPage, setCurrentPage] = useState<number>(1);
   const pageSize = 10;
@@ -105,14 +106,88 @@ export const ArticlesListScreen: React.FC = () => {
     return false;
   };
 
+  // Distinct Post Types with counts for Tab 1 filtering
+  const articlePostTypes = useMemo(() => {
+    const typeMap = new Map<string, { slug: string; name: string; count: number }>();
+
+    // 1. Seed from active site discoveredTypes if available
+    if (availableTypes && Array.isArray(availableTypes)) {
+      availableTypes.forEach(t => {
+        if (t.slug) {
+          const slugKey = t.slug.toLowerCase();
+          typeMap.set(slugKey, {
+            slug: t.slug,
+            name: t.name || t.slug,
+            count: 0,
+          });
+        }
+      });
+    }
+
+    // 2. Count occurrences and discover types from loaded articles
+    rawWebsiteArticles.forEach(art => {
+      const slug = (
+        art.contentTypeSlug ||
+        (art as any).postType ||
+        (art.contentType as any)?.slug ||
+        'post'
+      ).toLowerCase();
+      const name =
+        art.contentTypeName ||
+        (art.contentType as any)?.name ||
+        (art as any).postType ||
+        art.contentTypeSlug ||
+        (slug.charAt(0).toUpperCase() + slug.slice(1));
+
+      const existing = typeMap.get(slug);
+      if (existing) {
+        existing.count += 1;
+      } else {
+        typeMap.set(slug, {
+          slug,
+          name,
+          count: 1,
+        });
+      }
+    });
+
+    return Array.from(typeMap.values());
+  }, [availableTypes, rawWebsiteArticles]);
+
+  // Total count for current post type filter
+  const totalForCurrentPostType = useMemo(() => {
+    if (websiteArticlePostTypeFilter === 'ALL') return rawWebsiteArticles.length;
+    return rawWebsiteArticles.filter(art => {
+      const artSlug = (
+        art.contentTypeSlug ||
+        (art as any).postType ||
+        (art.contentType as any)?.slug ||
+        'post'
+      ).toLowerCase();
+      return artSlug === websiteArticlePostTypeFilter.toLowerCase();
+    }).length;
+  }, [rawWebsiteArticles, websiteArticlePostTypeFilter]);
+
   // Dynamic live & draft counts for quick filters
   const liveCount = useMemo(() => {
-    return rawWebsiteArticles.filter(isArticlePublished).length;
-  }, [rawWebsiteArticles]);
+    const source =
+      websiteArticlePostTypeFilter === 'ALL'
+        ? rawWebsiteArticles
+        : rawWebsiteArticles.filter(art => {
+            const artSlug = (
+              art.contentTypeSlug ||
+              (art as any).postType ||
+              (art.contentType as any)?.slug ||
+              'post'
+            ).toLowerCase();
+            return artSlug === websiteArticlePostTypeFilter.toLowerCase();
+          });
+    return source.filter(isArticlePublished).length;
+  }, [rawWebsiteArticles, websiteArticlePostTypeFilter]);
 
   const draftCount = useMemo(() => {
-    return rawWebsiteArticles.length - liveCount;
-  }, [rawWebsiteArticles, liveCount]);
+    return totalForCurrentPostType - liveCount;
+  }, [totalForCurrentPostType, liveCount]);
 
   // Instant In-Memory Frontend Filtering
   const displayedWebsiteArticles = useMemo(() => {
@@ -135,6 +210,20 @@ export const ArticlesListScreen: React.FC = () => {
       });
     }
 
+    // Filter by Post Type: 'ALL' | slug
+    if (websiteArticlePostTypeFilter !== 'ALL') {
+      const targetType = websiteArticlePostTypeFilter.toLowerCase();
+      result = result.filter(art => {
+        const artSlug = (
+          art.contentTypeSlug ||
+          (art as any).postType ||
+          (art.contentType as any)?.slug ||
+          'post'
+        ).toLowerCase();
+        return artSlug === targetType;
+      });
+    }
+
     // Filter by Status: 'ALL' | 'live' | 'publish' | 'draft'
     if (websiteArticleStatusFilter === 'live' || websiteArticleStatusFilter === 'publish') {
       result = result.filter(art => isArticlePublished(art));
@@ -143,7 +232,7 @@ export const ArticlesListScreen: React.FC = () => {
     }
 
     return result;
-  }, [rawWebsiteArticles, websiteArticleStatusFilter, websiteArticleSearchInput]);
+  }, [rawWebsiteArticles, websiteArticleStatusFilter, websiteArticlePostTypeFilter, websiteArticleSearchInput]);
 
   // Client-Side Pagination for instant navigation
   const totalPages = Math.max(1, Math.ceil(displayedWebsiteArticles.length / pageSize));
@@ -154,7 +243,7 @@ export const ArticlesListScreen: React.FC = () => {
   // Reset page to 1 whenever filter or search query changes
   useEffect(() => {
     setCurrentPage(1);
-  }, [websiteArticleStatusFilter, websiteArticleSearchInput]);
+  }, [websiteArticleStatusFilter, websiteArticlePostTypeFilter, websiteArticleSearchInput]);
 
   // Load Website Articles: GET /websites/:websiteId/articles
   const loadWebsiteArticles = async () => {
@@ -532,6 +621,23 @@ export const ArticlesListScreen: React.FC = () => {
                 )}
               </div>
 
+              {/* Post Type Filter */}
+              <div className="flex items-center gap-1.5 text-xs text-slate-500 shrink-0">
+                <span className="text-[11px] font-semibold text-slate-500 dark:text-zinc-400">Post Type:</span>
+                <select
+                  value={websiteArticlePostTypeFilter}
+                  onChange={e => setWebsiteArticlePostTypeFilter(e.target.value)}
+                  className="px-2.5 py-1.5 rounded-xl bg-slate-100 dark:bg-zinc-950 border border-slate-200 dark:border-zinc-800 text-xs font-semibold text-slate-800 dark:text-zinc-200 cursor-pointer outline-none focus:border-violet-500 transition-colors"
+                >
+                  <option value="ALL">All Types ({rawWebsiteArticles.length})</option>
+                  {articlePostTypes.map(t => (
+                    <option key={t.slug} value={t.slug}>
+                      {t.name} ({t.count})
+                    </option>
+                  ))}
+                </select>
+              </div>
+
               {/* Status Filter Interactive Pills */}
               <div className="flex items-center p-0.5 rounded-xl bg-slate-100 dark:bg-zinc-950 border border-slate-200 dark:border-zinc-800 shrink-0">
                 <button
@@ -543,7 +649,7 @@ export const ArticlesListScreen: React.FC = () => {
                       : 'text-slate-500 hover:text-slate-900 dark:hover:text-zinc-200'
                   }`}
                 >
-                  All ({rawWebsiteArticles.length})
+                  All ({totalForCurrentPostType})
                 </button>
                 <button
                   type="button"
@@ -574,7 +680,7 @@ export const ArticlesListScreen: React.FC = () => {
 
             <span className="text-xs font-mono text-slate-400 self-end md:self-auto shrink-0">
               Showing {paginatedArticles.length} of {displayedWebsiteArticles.length} records
-              {websiteArticleStatusFilter !== 'ALL' && ` (filtered from ${rawWebsiteArticles.length})`}
+              {(websiteArticleStatusFilter !== 'ALL' || websiteArticlePostTypeFilter !== 'ALL') && ` (filtered from ${rawWebsiteArticles.length})`}
             </span>
           </div>
 
@@ -608,19 +714,34 @@ export const ArticlesListScreen: React.FC = () => {
                         <FileText className="w-10 h-10 mx-auto mb-2 text-slate-300 dark:text-zinc-700" />
                         <p className="font-semibold text-slate-700 dark:text-zinc-300 text-sm">No Articles Found</p>
                         <p className="text-xs mt-1 text-slate-400">
-                          {websiteArticleStatusFilter !== 'ALL'
-                            ? `No articles match status "${websiteArticleStatusFilter}".`
+                          {websiteArticleStatusFilter !== 'ALL' || websiteArticlePostTypeFilter !== 'ALL' || websiteArticleSearchInput
+                            ? 'No articles match your active search, post type, or status filters.'
                             : 'Process new articles or import content to get started.'}
                         </p>
-                        <Button
-                          variant="glow"
-                          size="xs"
-                          onClick={navigateToNewArticle}
-                          icon={<Plus className="w-3.5 h-3.5" />}
-                          className="mt-4"
-                        >
-                          Process New Article
-                        </Button>
+                        {websiteArticleStatusFilter !== 'ALL' || websiteArticlePostTypeFilter !== 'ALL' || websiteArticleSearchInput ? (
+                          <Button
+                            variant="outline"
+                            size="xs"
+                            onClick={() => {
+                              setWebsiteArticleStatusFilter('ALL');
+                              setWebsiteArticlePostTypeFilter('ALL');
+                              setWebsiteArticleSearchInput('');
+                            }}
+                            className="mt-4"
+                          >
+                            Reset Filters
+                          </Button>
+                        ) : (
+                          <Button
+                            variant="glow"
+                            size="xs"
+                            onClick={navigateToNewArticle}
+                            icon={<Plus className="w-3.5 h-3.5" />}
+                            className="mt-4"
+                          >
+                            Process New Article
+                          </Button>
+                        )}
                       </td>
                     </tr>
                   ) : (
@@ -787,19 +908,34 @@ export const ArticlesListScreen: React.FC = () => {
                   <FileText className="w-10 h-10 mx-auto mb-2 text-slate-300 dark:text-zinc-700" />
                   <p className="font-semibold text-slate-700 dark:text-zinc-300 text-sm">No Articles Found</p>
                   <p className="text-xs mt-1 text-slate-400">
-                    {websiteArticleStatusFilter !== 'ALL'
-                      ? `No articles match status "${websiteArticleStatusFilter}".`
+                    {websiteArticleStatusFilter !== 'ALL' || websiteArticlePostTypeFilter !== 'ALL' || websiteArticleSearchInput
+                      ? 'No articles match your active search, post type, or status filters.'
                       : 'Process new articles or import content to get started.'}
                   </p>
-                  <Button
-                    variant="glow"
-                    size="xs"
-                    onClick={navigateToNewArticle}
-                    icon={<Plus className="w-3.5 h-3.5" />}
-                    className="mt-4"
-                  >
-                    Process New Article
-                  </Button>
+                  {websiteArticleStatusFilter !== 'ALL' || websiteArticlePostTypeFilter !== 'ALL' || websiteArticleSearchInput ? (
+                    <Button
+                      variant="outline"
+                      size="xs"
+                      onClick={() => {
+                        setWebsiteArticleStatusFilter('ALL');
+                        setWebsiteArticlePostTypeFilter('ALL');
+                        setWebsiteArticleSearchInput('');
+                      }}
+                      className="mt-4"
+                    >
+                      Reset Filters
+                    </Button>
+                  ) : (
+                    <Button
+                      variant="glow"
+                      size="xs"
+                      onClick={navigateToNewArticle}
+                      icon={<Plus className="w-3.5 h-3.5" />}
+                      className="mt-4"
+                    >
+                      Process New Article
+                    </Button>
+                  )}
                 </div>
               ) : (
                 paginatedArticles.map((art: ProcessedArticleDataDto) => {
