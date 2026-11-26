@@ -76,4 +76,8 @@ export const API_ENDPOINTS = {
     DELETE: (id: string) => `/notifications/${id}`,
     DELETE_ALL: '/notifications',
   },
+  API_KEYS: {
+    BASE: '/api-keys',
+    DETAIL: (id: string) => `/api-keys/${id}`,
+  },
 } as const;

@@ -1,7 +1,8 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Button } from '../../common/Button';
 import { Badge } from '../../common/Badge';
 import { useApp } from '../../../context/AppContext';
+import { apiKeysService, type ApiKeyItemDto } from '../../../api/services/apiKeys.service';
 import {
   Plug,
   Key,
@@ -14,17 +15,9 @@ import {
   Sparkles,
   ShieldCheck,
   Download,
-  Info,
+  RefreshCw,
   Wrench,
 } from 'lucide-react';
-
-interface MockApiKey {
-  id: string;
-  name: string;
-  prefix: string;
-  createdAt: string;
-  lastUsedAt: string | null;
-}
 
 const AVAILABLE_MCP_TOOLS = [
   { name: 'list_my_websites', desc: 'List connected WordPress sites' },
@@ -47,18 +40,32 @@ export const McpIntegrationsTab: React.FC = () => {
   const [selectedClient, setSelectedClient] = useState<'claude' | 'chatgpt' | 'gemini'>('claude');
   const [copiedField, setCopiedField] = useState<string | null>(null);
 
-  // Interactive preview state for Personal API Keys (will connect to backend /api-keys later)
   const [keyLabel, setKeyLabel] = useState<string>('');
   const [newlyGeneratedKey, setNewlyGeneratedKey] = useState<string | null>(null);
-  const [apiKeys, setApiKeys] = useState<MockApiKey[]>([
-    {
-      id: 'demo-1',
-      name: 'Claude Desktop (Work PC)',
-      prefix: 'wpa_live_8c4e••••••91a2',
-      createdAt: new Date().toISOString(),
-      lastUsedAt: new Date().toISOString(),
-    },
-  ]);
+  const [apiKeys, setApiKeys] = useState<ApiKeyItemDto[]>([]);
+  const [isLoadingKeys, setIsLoadingKeys] = useState<boolean>(true);
+  const [isGenerating, setIsGenerating] = useState<boolean>(false);
+  const [revokingId, setRevokingId] = useState<string | null>(null);
+
+  const loadKeys = async () => {
+    setIsLoadingKeys(true);
+    try {
+      const list = await apiKeysService.list();
+      setApiKeys(list);
+    } catch (err: any) {
+      addToast({
+        title: 'Failed to Load MCP Keys',
+        message: err.message || 'Could not fetch API keys from server.',
+        type: 'error',
+      });
+    } finally {
+      setIsLoadingKeys(false);
+    }
+  };
+
+  useEffect(() => {
+    loadKeys();
+  }, []);
 
   const handleCopy = (value: string, fieldId: string, label: string) => {
     navigator.clipboard.writeText(value);
@@ -71,38 +78,50 @@ export const McpIntegrationsTab: React.FC = () => {
     setTimeout(() => setCopiedField(null), 2000);
   };
 
-  const handleGenerateKey = (e: React.FormEvent) => {
+  const handleGenerateKey = async (e: React.FormEvent) => {
     e.preventDefault();
     const cleanName = keyLabel.trim() || `AI Client #${apiKeys.length + 1}`;
-    const randomPart = Math.random().toString(36).slice(2, 10) + Math.random().toString(36).slice(2, 10);
-    const fullKey = `wpa_live_${randomPart}`;
-
-    setNewlyGeneratedKey(fullKey);
-    setApiKeys(prev => [
-      {
-        id: `key-${Date.now()}`,
-        name: cleanName,
-        prefix: `${fullKey.slice(0, 13)}••••••${fullKey.slice(-4)}`,
-        createdAt: new Date().toISOString(),
-        lastUsedAt: null,
-      },
-      ...prev,
-    ]);
-    setKeyLabel('');
-    addToast({
-      title: 'Connection Key Generated (UI Preview)',
-      message: 'Copy this key now — in production it is shown only once.',
-      type: 'success',
-    });
+    setIsGenerating(true);
+    try {
+      const created = await apiKeysService.create(cleanName);
+      setNewlyGeneratedKey(created.key);
+      setApiKeys(prev => [created, ...prev]);
+      setKeyLabel('');
+      addToast({
+        title: 'MCP Connection Key Generated',
+        message: 'Copy this key now — it will not be shown again.',
+        type: 'success',
+      });
+    } catch (err: any) {
+      addToast({
+        title: 'Key Generation Failed',
+        message: err.message || 'Could not generate MCP key.',
+        type: 'error',
+      });
+    } finally {
+      setIsGenerating(false);
+    }
   };
 
-  const handleRevokeKey = (id: string, name: string) => {
-    setApiKeys(prev => prev.filter(k => k.id !== id));
-    addToast({
-      title: 'Key Revoked',
-      message: `"${name}" has been disconnected.`,
-      type: 'info',
-    });
+  const handleRevokeKey = async (id: string, name: string) => {
+    setRevokingId(id);
+    try {
+      await apiKeysService.revoke(id);
+      setApiKeys(prev => prev.filter(k => k.id !== id));
+      addToast({
+        title: 'Key Revoked',
+        message: `"${name}" has been disconnected.`,
+        type: 'info',
+      });
+    } catch (err: any) {
+      addToast({
+        title: 'Revoke Failed',
+        message: err.message || 'Could not revoke API key.',
+        type: 'error',
+      });
+    } finally {
+      setRevokingId(null);
+    }
   };
 
   const handleDownloadLocalConfig = () => {
@@ -128,19 +147,45 @@ export const McpIntegrationsTab: React.FC = () => {
 
   return (
     <div className="space-y-6">
-      {/* Preview Mode Notice */}
-      <div className="p-4 rounded-2xl bg-violet-50/80 dark:bg-violet-950/30 border border-violet-200 dark:border-violet-800/60 flex items-start gap-3">
-        <Info className="w-4 h-4 text-violet-600 dark:text-violet-400 shrink-0 mt-0.5" />
-        <div className="text-xs space-y-0.5">
-          <p className="font-bold text-violet-900 dark:text-violet-200">
-            UI Design Preview — Ready for Backend Wiring
+      {/* Simple 3-Step Intro Banner */}
+      <div className="p-5 rounded-2xl bg-gradient-to-r from-violet-50 to-indigo-50 dark:from-violet-950/40 dark:to-indigo-950/30 border border-violet-200 dark:border-violet-800/60 space-y-3">
+        <div>
+          <h2 className="text-sm font-bold text-slate-900 dark:text-zinc-100">
+            Connect Your AI Assistant in 60 Seconds
+          </h2>
+          <p className="text-xs text-slate-600 dark:text-zinc-300 mt-0.5">
+            Let Claude or ChatGPT read your WordPress layout, write matching posts, and send drafts straight to your dashboard — no copy-pasting needed.
           </p>
-          <p className="text-violet-800/80 dark:text-violet-300/80">
-            This tab shows the end-user MCP connection experience. Once we add the backend{' '}
-            <code className="font-mono px-1 py-0.5 rounded bg-violet-100 dark:bg-violet-900/60">/mcp</code>{' '}
-            Streamable HTTP endpoint and <code className="font-mono px-1 py-0.5 rounded bg-violet-100 dark:bg-violet-900/60">/api-keys</code>{' '}
-            table, keys generated here will work directly on any VPS.
-          </p>
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-1">
+          <div className="p-3 rounded-xl bg-white/80 dark:bg-zinc-900/70 border border-violet-200/70 dark:border-zinc-800">
+            <span className="text-[11px] font-bold text-violet-600 dark:text-violet-400">STEP 1</span>
+            <p className="text-xs font-semibold text-slate-800 dark:text-zinc-200 mt-0.5">
+              Generate a Key
+            </p>
+            <p className="text-[11px] text-slate-500 dark:text-zinc-400">
+              Create your personal connection key below and copy it.
+            </p>
+          </div>
+          <div className="p-3 rounded-xl bg-white/80 dark:bg-zinc-900/70 border border-violet-200/70 dark:border-zinc-800">
+            <span className="text-[11px] font-bold text-violet-600 dark:text-violet-400">STEP 2</span>
+            <p className="text-xs font-semibold text-slate-800 dark:text-zinc-200 mt-0.5">
+              Copy Your Link
+            </p>
+            <p className="text-[11px] text-slate-500 dark:text-zinc-400">
+              Copy the single connection URL shown right below.
+            </p>
+          </div>
+          <div className="p-3 rounded-xl bg-white/80 dark:bg-zinc-900/70 border border-violet-200/70 dark:border-zinc-800">
+            <span className="text-[11px] font-bold text-violet-600 dark:text-violet-400">STEP 3</span>
+            <p className="text-xs font-semibold text-slate-800 dark:text-zinc-200 mt-0.5">
+              Paste &amp; Chat
+            </p>
+            <p className="text-[11px] text-slate-500 dark:text-zinc-400">
+              Paste both in Claude or ChatGPT settings and start publishing.
+            </p>
+          </div>
         </div>
       </div>
 
@@ -153,15 +198,15 @@ export const McpIntegrationsTab: React.FC = () => {
             </div>
             <div>
               <h2 className="text-sm font-bold text-slate-900 dark:text-zinc-100">
-                Remote MCP Server Endpoint
+                1. Your Connection Link
               </h2>
               <p className="text-[11px] text-slate-500 dark:text-zinc-400">
-                Connect Claude, ChatGPT, or Gemini CLI directly over HTTPS — no Node.js or manual JSON required.
+                Use this single link for Claude, ChatGPT, and Gemini — works without installing anything.
               </p>
             </div>
           </div>
           <Badge variant="violet" size="sm">
-            Streamable HTTP
+            1-Link Setup
           </Badge>
         </div>
 
@@ -227,19 +272,22 @@ export const McpIntegrationsTab: React.FC = () => {
             </button>
           </div>
 
-          <div className="p-4 rounded-xl bg-slate-50 dark:bg-zinc-950 border border-slate-200 dark:border-zinc-800 text-xs text-slate-600 dark:text-zinc-300 space-y-2">
+          <div className="p-4 rounded-xl bg-slate-50 dark:bg-zinc-950 border border-slate-200 dark:border-zinc-800 text-xs text-slate-600 dark:text-zinc-300 space-y-2.5">
             {selectedClient === 'claude' && (
               <>
                 <p className="font-bold text-slate-900 dark:text-zinc-100">
-                  Connect in 3 steps (Claude Web or Claude Desktop):
+                  How to connect Claude (Web or Desktop App):
                 </p>
-                <ol className="list-decimal list-inside space-y-1">
-                  <li>Generate a Personal MCP Key below and copy it.</li>
+                <ol className="list-decimal list-inside space-y-1.5">
+                  <li>Click <strong>Generate MCP Key</strong> below and copy your key.</li>
                   <li>
-                    In Claude, go to <strong>Settings → Connectors → Add custom connector</strong>.
+                    Open Claude → go to <strong>Settings → Connectors → Add custom connector</strong>.
                   </li>
                   <li>
-                    Paste <code className="font-mono text-violet-600 dark:text-violet-400">{mcpEndpointUrl}</code> and enter your Bearer key.
+                    Paste the Connection Link above, choose <strong>Bearer Token</strong> (or Authorization header), and paste your key.
+                  </li>
+                  <li>
+                    Start a new chat and ask: <em>&ldquo;List my WordPress websites&rdquo;</em>.
                   </li>
                 </ol>
               </>
@@ -248,15 +296,19 @@ export const McpIntegrationsTab: React.FC = () => {
             {selectedClient === 'chatgpt' && (
               <>
                 <p className="font-bold text-slate-900 dark:text-zinc-100">
-                  Connect to ChatGPT Web (Custom GPT or Connector):
+                  How to connect ChatGPT Web:
                 </p>
-                <ol className="list-decimal list-inside space-y-1">
-                  <li>Generate a Personal MCP Key below and copy it.</li>
+                <ol className="list-decimal list-inside space-y-1.5">
+                  <li>Click <strong>Generate MCP Key</strong> below and copy your key.</li>
                   <li>
-                    In ChatGPT, add an MCP Connector (or Custom GPT Action using{' '}
-                    <code className="font-mono text-violet-600 dark:text-violet-400">/api/v1/docs-json</code>).
+                    Open ChatGPT → go to <strong>Settings → Connectors</strong> (or <strong>Custom GPT → Actions</strong>).
                   </li>
-                  <li>Set Authentication to <strong>Bearer Token</strong> and paste your key.</li>
+                  <li>
+                    Paste the Connection Link above, select <strong>Bearer Token</strong> authentication, and paste your key.
+                  </li>
+                  <li>
+                    Start chatting and ask: <em>&ldquo;List my WordPress websites&rdquo;</em>.
+                  </li>
                 </ol>
               </>
             )}
@@ -264,13 +316,16 @@ export const McpIntegrationsTab: React.FC = () => {
             {selectedClient === 'gemini' && (
               <>
                 <p className="font-bold text-slate-900 dark:text-zinc-100">
-                  Connect to Gemini CLI / Antigravity:
+                  How to connect Gemini CLI / Antigravity:
                 </p>
-                <ol className="list-decimal list-inside space-y-1">
-                  <li>Generate a Personal MCP Key below.</li>
+                <ol className="list-decimal list-inside space-y-1.5">
+                  <li>Click <strong>Generate MCP Key</strong> below and copy your key.</li>
                   <li>
-                    Add the remote URL <code className="font-mono text-violet-600 dark:text-violet-400">{mcpEndpointUrl}</code> with{' '}
-                    <code className="font-mono">Authorization: Bearer &lt;KEY&gt;</code> to your MCP settings.
+                    In your MCP settings, add the Connection Link above with header{' '}
+                    <code className="font-mono text-violet-600 dark:text-violet-400">Authorization: Bearer YOUR_KEY</code>.
+                  </li>
+                  <li>
+                    Ask: <em>&ldquo;List my WordPress websites&rdquo;</em>.
                   </li>
                 </ol>
               </>
@@ -296,15 +351,27 @@ export const McpIntegrationsTab: React.FC = () => {
             </div>
           </div>
 
-          <Button
-            type="button"
-            variant="outline"
-            size="xs"
-            onClick={handleDownloadLocalConfig}
-            icon={<Download className="w-3.5 h-3.5" />}
-          >
-            Download Config JSON
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              size="xs"
+              onClick={loadKeys}
+              disabled={isLoadingKeys}
+              icon={<RefreshCw className={`w-3.5 h-3.5 ${isLoadingKeys ? 'animate-spin' : ''}`} />}
+            >
+              Refresh
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              size="xs"
+              onClick={handleDownloadLocalConfig}
+              icon={<Download className="w-3.5 h-3.5" />}
+            >
+              Download Config JSON
+            </Button>
+          </div>
         </div>
 
         {/* Create New Key Form */}
@@ -316,7 +383,13 @@ export const McpIntegrationsTab: React.FC = () => {
             placeholder="Key label (e.g. Claude Desktop - MacBook)"
             className="flex-1 px-3.5 py-2 text-xs rounded-xl bg-slate-50 dark:bg-zinc-950 border border-slate-200 dark:border-zinc-800 text-slate-800 dark:text-zinc-200 outline-none focus:border-violet-500"
           />
-          <Button type="submit" variant="glow" size="sm" icon={<Plus className="w-3.5 h-3.5" />}>
+          <Button
+            type="submit"
+            variant="glow"
+            size="sm"
+            isLoading={isGenerating}
+            icon={<Plus className="w-3.5 h-3.5" />}
+          >
             Generate MCP Key
           </Button>
         </form>
@@ -356,7 +429,11 @@ export const McpIntegrationsTab: React.FC = () => {
 
         {/* Active Keys List */}
         <div className="divide-y divide-slate-200 dark:divide-zinc-800 rounded-xl border border-slate-200 dark:border-zinc-800 overflow-hidden">
-          {apiKeys.length === 0 ? (
+          {isLoadingKeys ? (
+            <div className="p-6 text-center text-xs text-slate-400">
+              Loading your MCP connection keys...
+            </div>
+          ) : apiKeys.length === 0 ? (
             <div className="p-6 text-center text-xs text-slate-400">
               No active MCP keys. Generate one above to connect Claude or ChatGPT.
             </div>
@@ -372,7 +449,7 @@ export const McpIntegrationsTab: React.FC = () => {
                       {item.name}
                     </span>
                     <span className="px-2 py-0.5 rounded text-[10px] font-mono bg-slate-200/80 dark:bg-zinc-800 text-slate-600 dark:text-zinc-400">
-                      {item.prefix}
+                      {item.keyPrefix}
                     </span>
                   </div>
                   <p className="text-[11px] text-slate-400 font-mono">
@@ -385,6 +462,7 @@ export const McpIntegrationsTab: React.FC = () => {
                   type="button"
                   variant="outline"
                   size="xs"
+                  isLoading={revokingId === item.id}
                   onClick={() => handleRevokeKey(item.id, item.name)}
                   icon={<Trash2 className="w-3 h-3 text-rose-500" />}
                 >
