@@ -33,7 +33,7 @@ export const Button: React.FC<ButtonProps> = ({
     primary:
       'bg-violet-600 hover:bg-violet-700 text-white font-medium shadow-sm shadow-violet-500/20 border border-violet-600',
     glow:
-      'bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-700 hover:to-indigo-700 text-white font-semibold shadow-md shadow-violet-500/20 border border-violet-500/40',
+      'bg-gradient-to-r from-blue-600 to-sky-600 hover:from-blue-700 hover:to-sky-700 text-white font-semibold shadow-md shadow-blue-500/20 border border-blue-500/40',
     secondary:
       'bg-white dark:bg-zinc-900 hover:bg-slate-100 dark:hover:bg-zinc-800 text-slate-800 dark:text-zinc-100 border border-slate-200 dark:border-zinc-800 shadow-xs',
     outline:

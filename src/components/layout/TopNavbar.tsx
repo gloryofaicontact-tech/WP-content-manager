@@ -105,7 +105,7 @@ export const TopNavbar: React.FC = () => {
               title="Click to switch active WordPress site"
             >
               {/* Site Icon Badge with pulse indicator */}
-              <div className="relative w-7 h-7 rounded-lg bg-gradient-to-tr from-violet-600 to-indigo-600 flex items-center justify-center text-white shrink-0 shadow-xs">
+              <div className="relative w-7 h-7 rounded-lg bg-gradient-to-tr from-blue-600 to-sky-600 flex items-center justify-center text-white shrink-0 shadow-xs">
                 <Globe className="w-3.5 h-3.5" />
                 <span className="absolute -bottom-0.5 -right-0.5 w-2 h-2 rounded-full bg-emerald-500 ring-2 ring-white dark:ring-zinc-900" />
               </div>
@@ -310,7 +310,7 @@ export const TopNavbar: React.FC = () => {
               }}
             />
           ) : (
-            <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-violet-600 to-indigo-600 flex items-center justify-center font-bold text-xs text-white shadow-xs shrink-0">
+            <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-blue-600 to-sky-600 flex items-center justify-center font-bold text-xs text-white shadow-xs shrink-0">
               {currentUser?.fullName
                 ? currentUser.fullName
                   .split(' ')

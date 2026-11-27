@@ -178,7 +178,7 @@ export const McpIntegrationsTab: React.FC = () => {
   return (
     <div className="space-y-6">
       {/* Simple 3-Step Intro Banner */}
-      <div className="p-5 rounded-2xl bg-gradient-to-r from-violet-50 to-indigo-50 dark:from-violet-950/40 dark:to-indigo-950/30 border border-violet-200 dark:border-violet-800/60 space-y-3">
+      <div className="p-5 rounded-2xl bg-gradient-to-r from-blue-50 to-sky-50 dark:from-blue-950/40 dark:to-sky-950/30 border border-blue-200 dark:border-blue-800/60 space-y-3">
         <div>
           <h2 className="text-sm font-bold text-slate-900 dark:text-zinc-100">
             Connect Your AI Assistant in 60 Seconds
@@ -189,8 +189,8 @@ export const McpIntegrationsTab: React.FC = () => {
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-1">
-          <div className="p-3 rounded-xl bg-white/80 dark:bg-zinc-900/70 border border-violet-200/70 dark:border-zinc-800">
-            <span className="text-[11px] font-bold text-violet-600 dark:text-violet-400">STEP 1</span>
+          <div className="p-3 rounded-xl bg-white/80 dark:bg-zinc-900/70 border border-blue-200/70 dark:border-zinc-800">
+            <span className="text-[11px] font-bold text-blue-600 dark:text-blue-400">STEP 1</span>
             <p className="text-xs font-semibold text-slate-800 dark:text-zinc-200 mt-0.5">
               Generate a Key
             </p>
@@ -198,8 +198,8 @@ export const McpIntegrationsTab: React.FC = () => {
               Create your personal connection key below and copy it.
             </p>
           </div>
-          <div className="p-3 rounded-xl bg-white/80 dark:bg-zinc-900/70 border border-violet-200/70 dark:border-zinc-800">
-            <span className="text-[11px] font-bold text-violet-600 dark:text-violet-400">STEP 2</span>
+          <div className="p-3 rounded-xl bg-white/80 dark:bg-zinc-900/70 border border-blue-200/70 dark:border-zinc-800">
+            <span className="text-[11px] font-bold text-blue-600 dark:text-blue-400">STEP 2</span>
             <p className="text-xs font-semibold text-slate-800 dark:text-zinc-200 mt-0.5">
               Copy Your Link
             </p>
@@ -207,8 +207,8 @@ export const McpIntegrationsTab: React.FC = () => {
               Copy the single connection URL shown right below.
             </p>
           </div>
-          <div className="p-3 rounded-xl bg-white/80 dark:bg-zinc-900/70 border border-violet-200/70 dark:border-zinc-800">
-            <span className="text-[11px] font-bold text-violet-600 dark:text-violet-400">STEP 3</span>
+          <div className="p-3 rounded-xl bg-white/80 dark:bg-zinc-900/70 border border-blue-200/70 dark:border-zinc-800">
+            <span className="text-[11px] font-bold text-blue-600 dark:text-blue-400">STEP 3</span>
             <p className="text-xs font-semibold text-slate-800 dark:text-zinc-200 mt-0.5">
               Paste &amp; Chat
             </p>

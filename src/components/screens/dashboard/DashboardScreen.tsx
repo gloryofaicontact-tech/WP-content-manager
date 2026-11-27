@@ -232,14 +232,14 @@ export const DashboardScreen: React.FC = () => {
   return (
     <div className="space-y-6 max-w-7xl mx-auto pb-10">
       {/* Hero Welcome Banner */}
-      <div className="relative overflow-hidden p-6 sm:p-8 rounded-3xl bg-gradient-to-r from-violet-900 via-indigo-900 to-slate-900 text-white shadow-lg border border-violet-800/40">
+      <div className="relative overflow-hidden p-6 sm:p-8 rounded-3xl bg-gradient-to-r from-blue-900 via-sky-950 to-slate-900 text-white shadow-lg border border-blue-800/40">
         {/* Decorative background glow */}
-        <div className="absolute top-0 right-0 -mt-10 -mr-10 w-72 h-72 rounded-full bg-violet-500/20 blur-3xl pointer-events-none" />
-        <div className="absolute bottom-0 left-1/3 -mb-10 w-48 h-48 rounded-full bg-indigo-500/20 blur-2xl pointer-events-none" />
+        <div className="absolute top-0 right-0 -mt-10 -mr-10 w-72 h-72 rounded-full bg-blue-500/20 blur-3xl pointer-events-none" />
+        <div className="absolute bottom-0 left-1/3 -mb-10 w-48 h-48 rounded-full bg-sky-500/20 blur-2xl pointer-events-none" />
 
         <div className="relative z-10 flex flex-col md:flex-row md:items-center md:justify-between gap-6">
           <div className="space-y-2 max-w-2xl">
-            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-white/10 backdrop-blur-md text-violet-200 text-xs font-semibold border border-white/10">
+            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-white/10 backdrop-blur-md text-blue-200 text-xs font-semibold border border-white/10">
               <Sparkles className="w-3.5 h-3.5 text-amber-300" />
               <span>AI Content Generation Engine Ready</span>
             </div>
@@ -248,12 +248,12 @@ export const DashboardScreen: React.FC = () => {
               {getGreeting()}, {currentUser?.fullName || 'Publisher'}!
             </h1>
 
-            <p className="text-xs sm:text-sm text-violet-200/90 leading-relaxed">
+            <p className="text-xs sm:text-sm text-blue-100/90 leading-relaxed">
               Multi-site WordPress automation hub is live. Transform raw content into SEO-optimized, schema-tagged custom post types with Envato stock assets.
             </p>
 
             {activeSite && (
-              <div className="pt-2 flex items-center gap-2 text-xs text-violet-200/80 font-mono">
+              <div className="pt-2 flex items-center gap-2 text-xs text-blue-200/80 font-mono">
                 <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
                 <span>Active site: </span>
                 <span className="font-semibold text-white">{activeSite.name}</span>

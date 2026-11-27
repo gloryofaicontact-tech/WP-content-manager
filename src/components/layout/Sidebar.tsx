@@ -202,7 +202,7 @@ export const Sidebar: React.FC = () => {
                 navigateToNewArticle();
                 setIsMobileSidebarOpen(false);
               }}
-              className="w-full py-2.5 px-3 rounded-xl bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-700 hover:to-indigo-700 text-white text-xs font-semibold shadow-xs flex items-center justify-center gap-2 transition-all cursor-pointer hover:shadow-violet-500/20"
+              className="w-full py-2.5 px-3 rounded-xl bg-gradient-to-r from-blue-600 to-sky-600 hover:from-blue-700 hover:to-sky-700 text-white text-xs font-semibold shadow-xs flex items-center justify-center gap-2 transition-all cursor-pointer hover:shadow-blue-500/20"
             >
               <PlusCircle className="w-4 h-4" />
               <span>Process New Article</span>
