@@ -14,9 +14,18 @@ import {
   Key,
   ArrowLeft,
   ShieldCheck,
+  AlertCircle,
 } from 'lucide-react';
 
 type AuthScreenMode = 'login' | 'register' | 'forgot-password' | 'reset-password' | 'verify-email';
+
+interface RegisterValidationErrors {
+  fullName?: string;
+  email?: string;
+  password?: string;
+  confirmPassword?: string;
+  general?: string;
+}
 
 export const AuthScreen: React.FC = () => {
   const { authMode, setAuthMode, login, register, addToast } = useApp();
@@ -62,6 +71,7 @@ export const AuthScreen: React.FC = () => {
   const [confirmPassword, setConfirmPassword] = useState('');
   const [showRegPassword, setShowRegPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const [regErrors, setRegErrors] = useState<RegisterValidationErrors>({});
 
   // Forgot password form state
   const [forgotEmail, setForgotEmail] = useState('');
@@ -113,37 +123,81 @@ export const AuthScreen: React.FC = () => {
     }
   };
 
-  // Handle Register Submit
+  // Handle Register Submit with comprehensive validation
   const handleRegisterSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!fullName.trim() || !regEmail.trim() || !regPassword.trim() || !confirmPassword.trim()) {
+    const errors: RegisterValidationErrors = {};
+
+    // 1. Full Name validation
+    const trimmedName = fullName.trim();
+    if (!trimmedName) {
+      errors.fullName = 'Full Name is required.';
+    } else if (trimmedName.length < 2) {
+      errors.fullName = 'Full Name must be at least 2 characters long.';
+    }
+
+    // 2. Email validation
+    const trimmedEmail = regEmail.trim();
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!trimmedEmail) {
+      errors.email = 'Email address is required.';
+    } else if (!emailRegex.test(trimmedEmail)) {
+      errors.email = 'Please enter a valid email address (e.g., user@example.com).';
+    }
+
+    // 3. Password validation
+    if (!regPassword) {
+      errors.password = 'Password is required.';
+    } else if (regPassword.length < 8) {
+      errors.password = 'Password must be at least 8 characters long.';
+    } else if (!/(?=.*[a-zA-Z])(?=.*\d)/.test(regPassword)) {
+      errors.password = 'Password must contain at least one letter and one number.';
+    }
+
+    // 4. Confirm Password validation
+    if (!confirmPassword) {
+      errors.confirmPassword = 'Please confirm your password.';
+    } else if (regPassword !== confirmPassword) {
+      errors.confirmPassword = 'Passwords do not match.';
+    }
+
+    if (Object.keys(errors).length > 0) {
+      setRegErrors(errors);
       addToast({
-        title: 'Validation Error',
-        message: 'Please fill in all required fields.',
+        title: 'Validation Failed',
+        message: 'Please resolve the highlighted errors below.',
         type: 'warning',
       });
       return;
     }
 
-    if (regPassword !== confirmPassword) {
-      addToast({
-        title: 'Password Mismatch',
-        message: 'Passwords do not match.',
-        type: 'error',
-      });
-      return;
-    }
-
+    setRegErrors({});
     setIsLoading(true);
     try {
       await register({
-        fullName: fullName.trim(),
-        email: regEmail.trim(),
+        fullName: trimmedName,
+        email: trimmedEmail,
         password: regPassword,
         confirmPassword,
       });
-    } catch {
-      // Error handled in AppContext
+    } catch (err: any) {
+      const backendMessage = err.response?.data?.message || err.message;
+      let generalError = '';
+
+      if (Array.isArray(backendMessage)) {
+        generalError = backendMessage.join(' • ');
+      } else if (typeof backendMessage === 'string') {
+        if (backendMessage.toLowerCase().includes('already exists') || err.response?.status === 409) {
+          generalError = 'An account with this email address already exists. Please sign in or use forgot password.';
+          setRegErrors(prev => ({ ...prev, email: 'Email is already registered.' }));
+        } else {
+          generalError = backendMessage;
+        }
+      } else {
+        generalError = 'Registration failed. Please try again later.';
+      }
+
+      setRegErrors(prev => ({ ...prev, general: generalError }));
     } finally {
       setIsLoading(false);
     }
@@ -449,87 +503,151 @@ export const AuthScreen: React.FC = () => {
 
         {/* ---------------- 2. REGISTER FORM ---------------- */}
         {mode === 'register' && (
-          <form onSubmit={handleRegisterSubmit} className="space-y-3.5">
+          <form onSubmit={handleRegisterSubmit} className="space-y-3.5" noValidate>
+            {regErrors.general && (
+              <div className="p-3 rounded-xl bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800 flex items-start gap-2.5 text-xs text-rose-700 dark:text-rose-300">
+                <AlertCircle className="w-4 h-4 text-rose-500 shrink-0 mt-0.5" />
+                <div className="leading-relaxed">
+                  <span className="font-semibold">Unable to register: </span>
+                  {regErrors.general}
+                </div>
+              </div>
+            )}
+
             <div>
               <label className="text-xs font-semibold text-slate-700 dark:text-zinc-300 block mb-1">
-                Full Name
+                Full Name <span className="text-rose-500">*</span>
               </label>
               <div className="relative flex items-center">
                 <User className="w-4 h-4 text-slate-400 dark:text-zinc-500 absolute left-3 pointer-events-none" />
                 <input
                   type="text"
-                  required
                   placeholder="Super Admin User"
                   value={fullName}
-                  onChange={e => setFullName(e.target.value)}
-                  className="w-full bg-slate-50 dark:bg-zinc-950 border border-slate-200 dark:border-zinc-800 text-xs text-slate-900 dark:text-zinc-100 rounded-xl pl-9 pr-3 py-2.5 focus:border-violet-500 focus:bg-white dark:focus:bg-zinc-900 focus:outline-none transition-all"
+                  onChange={e => {
+                    setFullName(e.target.value);
+                    if (regErrors.fullName) setRegErrors(prev => ({ ...prev, fullName: undefined }));
+                  }}
+                  className={`w-full bg-slate-50 dark:bg-zinc-950 border ${
+                    regErrors.fullName
+                      ? 'border-rose-500 focus:border-rose-500 focus:ring-1 focus:ring-rose-500/20'
+                      : 'border-slate-200 dark:border-zinc-800 focus:border-blue-500'
+                  } text-xs text-slate-900 dark:text-zinc-100 rounded-xl pl-9 pr-3 py-2.5 focus:bg-white dark:focus:bg-zinc-900 focus:outline-none transition-all`}
                 />
               </div>
+              {regErrors.fullName && (
+                <p className="text-[11px] text-rose-500 dark:text-rose-400 mt-1 flex items-center gap-1 font-medium">
+                  <AlertCircle className="w-3 h-3 shrink-0" />
+                  {regErrors.fullName}
+                </p>
+              )}
             </div>
 
             <div>
               <label className="text-xs font-semibold text-slate-700 dark:text-zinc-300 block mb-1">
-                Email
+                Email Address <span className="text-rose-500">*</span>
               </label>
               <div className="relative flex items-center">
                 <Mail className="w-4 h-4 text-slate-400 dark:text-zinc-500 absolute left-3 pointer-events-none" />
                 <input
                   type="email"
-                  required
                   placeholder="admin@example.com"
                   value={regEmail}
-                  onChange={e => setRegEmail(e.target.value)}
-                  className="w-full bg-slate-50 dark:bg-zinc-950 border border-slate-200 dark:border-zinc-800 text-xs text-slate-900 dark:text-zinc-100 rounded-xl pl-9 pr-3 py-2.5 focus:border-violet-500 focus:bg-white dark:focus:bg-zinc-900 focus:outline-none transition-all"
+                  onChange={e => {
+                    setRegEmail(e.target.value);
+                    if (regErrors.email) setRegErrors(prev => ({ ...prev, email: undefined }));
+                  }}
+                  className={`w-full bg-slate-50 dark:bg-zinc-950 border ${
+                    regErrors.email
+                      ? 'border-rose-500 focus:border-rose-500 focus:ring-1 focus:ring-rose-500/20'
+                      : 'border-slate-200 dark:border-zinc-800 focus:border-blue-500'
+                  } text-xs text-slate-900 dark:text-zinc-100 rounded-xl pl-9 pr-3 py-2.5 focus:bg-white dark:focus:bg-zinc-900 focus:outline-none transition-all`}
                 />
               </div>
+              {regErrors.email && (
+                <p className="text-[11px] text-rose-500 dark:text-rose-400 mt-1 flex items-center gap-1 font-medium">
+                  <AlertCircle className="w-3 h-3 shrink-0" />
+                  {regErrors.email}
+                </p>
+              )}
             </div>
 
             <div>
               <label className="text-xs font-semibold text-slate-700 dark:text-zinc-300 block mb-1">
-                Password
+                Password <span className="text-rose-500">*</span>
               </label>
               <div className="relative flex items-center">
                 <Lock className="w-4 h-4 text-slate-400 dark:text-zinc-500 absolute left-3 pointer-events-none" />
                 <input
                   type={showRegPassword ? 'text' : 'password'}
-                  required
-                  placeholder="SecurePassword123!"
+                  placeholder="Min. 8 characters (letters & numbers)"
                   value={regPassword}
-                  onChange={e => setRegPassword(e.target.value)}
-                  className="w-full bg-slate-50 dark:bg-zinc-950 border border-slate-200 dark:border-zinc-800 text-xs text-slate-900 dark:text-zinc-100 rounded-xl pl-9 pr-9 py-2.5 focus:border-violet-500 focus:bg-white dark:focus:bg-zinc-900 focus:outline-none transition-all"
+                  onChange={e => {
+                    setRegPassword(e.target.value);
+                    if (regErrors.password) setRegErrors(prev => ({ ...prev, password: undefined }));
+                  }}
+                  className={`w-full bg-slate-50 dark:bg-zinc-950 border ${
+                    regErrors.password
+                      ? 'border-rose-500 focus:border-rose-500 focus:ring-1 focus:ring-rose-500/20'
+                      : 'border-slate-200 dark:border-zinc-800 focus:border-blue-500'
+                  } text-xs text-slate-900 dark:text-zinc-100 rounded-xl pl-9 pr-9 py-2.5 focus:bg-white dark:focus:bg-zinc-900 focus:outline-none transition-all`}
                 />
                 <button
                   type="button"
                   onClick={() => setShowRegPassword(!showRegPassword)}
                   className="p-1.5 text-slate-400 hover:text-slate-600 dark:text-zinc-500 absolute right-2.5 cursor-pointer"
+                  tabIndex={-1}
                 >
                   {showRegPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                 </button>
               </div>
+              {regErrors.password ? (
+                <p className="text-[11px] text-rose-500 dark:text-rose-400 mt-1 flex items-center gap-1 font-medium">
+                  <AlertCircle className="w-3 h-3 shrink-0" />
+                  {regErrors.password}
+                </p>
+              ) : (
+                <p className="text-[10px] text-slate-400 dark:text-zinc-500 mt-1">
+                  At least 8 characters with a mix of letters and numbers.
+                </p>
+              )}
             </div>
 
             <div>
               <label className="text-xs font-semibold text-slate-700 dark:text-zinc-300 block mb-1">
-                Confirm Password
+                Confirm Password <span className="text-rose-500">*</span>
               </label>
               <div className="relative flex items-center">
                 <Lock className="w-4 h-4 text-slate-400 dark:text-zinc-500 absolute left-3 pointer-events-none" />
                 <input
                   type={showConfirmPassword ? 'text' : 'password'}
-                  required
-                  placeholder="Confirm password"
+                  placeholder="Re-enter password"
                   value={confirmPassword}
-                  onChange={e => setConfirmPassword(e.target.value)}
-                  className="w-full bg-slate-50 dark:bg-zinc-950 border border-slate-200 dark:border-zinc-800 text-xs text-slate-900 dark:text-zinc-100 rounded-xl pl-9 pr-9 py-2.5 focus:border-violet-500 focus:bg-white dark:focus:bg-zinc-900 focus:outline-none transition-all"
+                  onChange={e => {
+                    setConfirmPassword(e.target.value);
+                    if (regErrors.confirmPassword) setRegErrors(prev => ({ ...prev, confirmPassword: undefined }));
+                  }}
+                  className={`w-full bg-slate-50 dark:bg-zinc-950 border ${
+                    regErrors.confirmPassword
+                      ? 'border-rose-500 focus:border-rose-500 focus:ring-1 focus:ring-rose-500/20'
+                      : 'border-slate-200 dark:border-zinc-800 focus:border-blue-500'
+                  } text-xs text-slate-900 dark:text-zinc-100 rounded-xl pl-9 pr-9 py-2.5 focus:bg-white dark:focus:bg-zinc-900 focus:outline-none transition-all`}
                 />
                 <button
                   type="button"
                   onClick={() => setShowConfirmPassword(!showConfirmPassword)}
                   className="p-1.5 text-slate-400 hover:text-slate-600 dark:text-zinc-500 absolute right-2.5 cursor-pointer"
+                  tabIndex={-1}
                 >
                   {showConfirmPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                 </button>
               </div>
+              {regErrors.confirmPassword && (
+                <p className="text-[11px] text-rose-500 dark:text-rose-400 mt-1 flex items-center gap-1 font-medium">
+                  <AlertCircle className="w-3 h-3 shrink-0" />
+                  {regErrors.confirmPassword}
+                </p>
+              )}
             </div>
 
             <Button
@@ -537,7 +655,7 @@ export const AuthScreen: React.FC = () => {
               variant="glow"
               size="md"
               isLoading={isLoading}
-              className="w-full font-bold shadow-md shadow-violet-500/20 mt-2"
+              className="w-full font-bold shadow-md shadow-blue-500/20 mt-2"
             >
               Create Account
             </Button>

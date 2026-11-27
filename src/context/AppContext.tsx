@@ -402,13 +402,20 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       });
       return true;
     } catch (err: any) {
-      const errorMsg =
+      let errorMsg =
         err.response?.data?.message ||
         err.message ||
         'Registration failed. Please check backend response.';
+
+      if (Array.isArray(errorMsg)) {
+        errorMsg = errorMsg.join(' • ');
+      } else if (typeof errorMsg === 'string' && (errorMsg.includes('already exists') || err.response?.status === 409)) {
+        errorMsg = 'An account with this email address already exists. Please sign in or reset your password.';
+      }
+
       addToast({
         title: 'Registration Failed',
-        message: Array.isArray(errorMsg) ? errorMsg.join(', ') : errorMsg,
+        message: String(errorMsg),
         type: 'error',
       });
       throw err;
