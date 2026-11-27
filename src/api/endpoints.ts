@@ -80,4 +80,8 @@ export const API_ENDPOINTS = {
     BASE: '/api-keys',
     DETAIL: (id: string) => `/api-keys/${id}`,
   },
+  WP_CONNECTOR: {
+    TOKEN: '/wp-connector/token',
+    PLUGIN_DOWNLOAD: '/wp-connector/plugin/download',
+  },
 } as const;

@@ -435,4 +435,18 @@ export const websitesService = {
     const resData: any = response.data;
     return resData?.data || resData;
   },
+
+  /**
+   * POST {{baseUrl}}/wp-connector/token
+   */
+  async generateConnectorToken(): Promise<{
+    connectToken: string;
+    expiresInSeconds: number;
+    connectEndpoint: string;
+    downloadUrl: string;
+  }> {
+    const response = await apiClient.post<any>(API_ENDPOINTS.WP_CONNECTOR.TOKEN);
+    const resData: any = response.data;
+    return resData?.data || resData;
+  },
 };
