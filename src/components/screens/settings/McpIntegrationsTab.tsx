@@ -37,7 +37,7 @@ export const McpIntegrationsTab: React.FC = () => {
   const apiBase = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3000/api/v1';
   const mcpEndpointUrl = apiBase.replace(/\/api(\/v\d+)?\/?$/, '') + '/mcp';
 
-  const [selectedClient, setSelectedClient] = useState<'claude' | 'chatgpt' | 'gemini'>('claude');
+  const [selectedClient, setSelectedClient] = useState<'claude' | 'cursor' | 'chatgpt' | 'gemini'>('claude');
   const [copiedField, setCopiedField] = useState<string | null>(null);
 
   const [keyLabel, setKeyLabel] = useState<string>('');
@@ -126,13 +126,29 @@ export const McpIntegrationsTab: React.FC = () => {
 
   const handleDownloadLocalConfig = () => {
     const tokenValue = newlyGeneratedKey || 'PASTE_YOUR_MCP_KEY_HERE';
+    const isWindows = typeof navigator !== 'undefined' && /win/i.test(navigator.userAgent || '');
+
     const config = {
       mcpServers: {
-        'wp-automation': {
-          url: mcpEndpointUrl,
-          headers: {
-            Authorization: `Bearer ${tokenValue}`,
-          },
+        'wp-automation-remote': {
+          command: isWindows ? 'cmd.exe' : 'npx',
+          args: isWindows
+            ? [
+                '/c',
+                'npx',
+                '-y',
+                'mcp-remote',
+                mcpEndpointUrl,
+                '--header',
+                `Authorization: Bearer ${tokenValue}`,
+              ]
+            : [
+                '-y',
+                'mcp-remote',
+                mcpEndpointUrl,
+                '--header',
+                `Authorization: Bearer ${tokenValue}`,
+              ],
         },
       },
     };
@@ -143,6 +159,20 @@ export const McpIntegrationsTab: React.FC = () => {
     a.download = 'claude_desktop_config.json';
     a.click();
     URL.revokeObjectURL(url);
+
+    if (!newlyGeneratedKey) {
+      addToast({
+        title: 'Replace Key in Config',
+        message: 'Be sure to replace PASTE_YOUR_MCP_KEY_HERE with your generated key in Settings.',
+        type: 'info',
+      });
+    } else {
+      addToast({
+        title: 'Config Downloaded',
+        message: 'claude_desktop_config.json generated with your active MCP key.',
+        type: 'success',
+      });
+    }
   };
 
   return (
@@ -244,7 +274,19 @@ export const McpIntegrationsTab: React.FC = () => {
               }`}
             >
               <Sparkles className="w-3.5 h-3.5" />
-              Claude (Web & Desktop)
+              Claude Desktop
+            </button>
+            <button
+              type="button"
+              onClick={() => setSelectedClient('cursor')}
+              className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors cursor-pointer flex items-center gap-1.5 ${
+                selectedClient === 'cursor'
+                  ? 'bg-violet-600 text-white'
+                  : 'bg-slate-100 dark:bg-zinc-800 text-slate-600 dark:text-zinc-300 hover:bg-slate-200 dark:hover:bg-zinc-700'
+              }`}
+            >
+              <Wrench className="w-3.5 h-3.5" />
+              Cursor / Windsurf
             </button>
             <button
               type="button"
@@ -256,7 +298,7 @@ export const McpIntegrationsTab: React.FC = () => {
               }`}
             >
               <Globe className="w-3.5 h-3.5" />
-              ChatGPT Web
+              ChatGPT (Custom GPT)
             </button>
             <button
               type="button"
@@ -276,18 +318,41 @@ export const McpIntegrationsTab: React.FC = () => {
             {selectedClient === 'claude' && (
               <>
                 <p className="font-bold text-slate-900 dark:text-zinc-100">
-                  How to connect Claude (Web or Desktop App):
+                  How to connect Claude Desktop:
                 </p>
                 <ol className="list-decimal list-inside space-y-1.5">
                   <li>Click <strong>Generate MCP Key</strong> below and copy your key.</li>
                   <li>
-                    Open Claude → go to <strong>Settings → Connectors → Add custom connector</strong>.
+                    Click <strong>Download Config JSON</strong> above to get your pre-configured{' '}
+                    <code className="font-mono text-violet-600 dark:text-violet-400">claude_desktop_config.json</code>.
                   </li>
                   <li>
-                    Paste the Connection Link above, choose <strong>Bearer Token</strong> (or Authorization header), and paste your key.
+                    Place it in your Claude configuration folder (Windows:{' '}
+                    <code className="font-mono text-[10px]">%APPDATA%\Claude\claude_desktop_config.json</code>).
                   </li>
                   <li>
-                    Start a new chat and ask: <em>&ldquo;List my WordPress websites&rdquo;</em>.
+                    Restart Claude Desktop and ask: <em>&ldquo;List my WordPress websites&rdquo;</em>.
+                  </li>
+                </ol>
+              </>
+            )}
+
+            {selectedClient === 'cursor' && (
+              <>
+                <p className="font-bold text-slate-900 dark:text-zinc-100">
+                  How to connect Cursor or Windsurf IDE:
+                </p>
+                <ol className="list-decimal list-inside space-y-1.5">
+                  <li>Click <strong>Generate MCP Key</strong> below and copy your key.</li>
+                  <li>
+                    In Cursor, go to <strong>Settings → Features → MCP Servers → + Add New MCP Server</strong>.
+                  </li>
+                  <li>
+                    Set Type to <strong>SSE</strong> (or Remote), paste the Connection URL above, and add header{' '}
+                    <code className="font-mono text-violet-600 dark:text-violet-400">Authorization: Bearer YOUR_KEY</code>.
+                  </li>
+                  <li>
+                    Open Composer (Ctrl/Cmd + I) and ask: <em>&ldquo;List my connected WordPress sites&rdquo;</em>.
                   </li>
                 </ol>
               </>
@@ -296,18 +361,26 @@ export const McpIntegrationsTab: React.FC = () => {
             {selectedClient === 'chatgpt' && (
               <>
                 <p className="font-bold text-slate-900 dark:text-zinc-100">
-                  How to connect ChatGPT Web:
+                  How to connect ChatGPT (Custom GPT with Actions):
                 </p>
+                <div className="p-2 rounded-lg bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800/60 text-amber-800 dark:text-amber-300 text-[11px] mb-2">
+                  <strong>Note:</strong> Custom GPTs require a <strong>ChatGPT Plus or Team</strong> subscription. OpenAI integrates external tools through &ldquo;Custom GPT Actions&rdquo; rather than direct MCP SSE.
+                </div>
                 <ol className="list-decimal list-inside space-y-1.5">
-                  <li>Click <strong>Generate MCP Key</strong> below and copy your key.</li>
                   <li>
-                    Open ChatGPT → go to <strong>Settings → Connectors</strong> (or <strong>Custom GPT → Actions</strong>).
+                    In ChatGPT, click <strong>Explore GPTs</strong> in the left sidebar (or click your profile icon &rarr; <strong>My GPTs</strong>).
                   </li>
                   <li>
-                    Paste the Connection Link above, select <strong>Bearer Token</strong> authentication, and paste your key.
+                    Click the <strong>+ Create</strong> button in the top right corner.
                   </li>
                   <li>
-                    Start chatting and ask: <em>&ldquo;List my WordPress websites&rdquo;</em>.
+                    Click the <strong>Configure</strong> tab (next to &ldquo;Create&rdquo;).
+                  </li>
+                  <li>
+                    Scroll to the bottom to <strong>Actions</strong> and click <strong>Create new action</strong>.
+                  </li>
+                  <li>
+                    Under <strong>Authentication</strong>, select <strong>API Key</strong> &rarr; <strong>Bearer</strong>, and paste your generated key.
                   </li>
                 </ol>
               </>
@@ -321,7 +394,7 @@ export const McpIntegrationsTab: React.FC = () => {
                 <ol className="list-decimal list-inside space-y-1.5">
                   <li>Click <strong>Generate MCP Key</strong> below and copy your key.</li>
                   <li>
-                    In your MCP settings, add the Connection Link above with header{' '}
+                    In your MCP client configuration, add the Connection Link above with header{' '}
                     <code className="font-mono text-violet-600 dark:text-violet-400">Authorization: Bearer YOUR_KEY</code>.
                   </li>
                   <li>

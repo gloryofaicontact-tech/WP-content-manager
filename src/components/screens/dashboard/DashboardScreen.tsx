@@ -1,9 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import { useArticles } from '../../../context/ArticleContext';
 import { useApp } from '../../../context/AppContext';
-import { Badge } from '../../common/Badge';
 import { Button } from '../../common/Button';
 import { settingsService } from '../../../api/services/settings.service';
+import { websitesService } from '../../../api/services/websites.service';
+import { articlesService } from '../../../api/services/articles.service';
+import type { ProcessedArticleDataDto } from '../../../api/types/article.dto';
 import type { AiSettingsDataDto } from '../../../api/types/settings.dto';
 import {
   Globe,
@@ -21,22 +23,56 @@ import {
   ShieldCheck,
   Cpu,
   Layers,
+  RefreshCw,
 } from 'lucide-react';
 
 export const DashboardScreen: React.FC = () => {
-  const { stats, articles, publishArticleToWP } = useArticles();
+  const { stats } = useArticles();
   const {
     sites,
     activeSiteId,
     setIsAddWebsiteModalOpen,
     navigateToNewArticle,
-    setCurrentScreen,
+    navigateToEditArticle,
     navigateToWebsiteDetail,
-    setSelectedArticleIdForEdit,
+    setCurrentScreen,
     currentUser,
+    addToast,
   } = useApp();
 
   const [aiSettings, setAiSettings] = useState<AiSettingsDataDto | null>(null);
+  const [createdArticles, setCreatedArticles] = useState<ProcessedArticleDataDto[]>([]);
+  const [isLoadingCreatedArticles, setIsLoadingCreatedArticles] = useState<boolean>(true);
+  const [togglingArticleId, setTogglingArticleId] = useState<string | null>(null);
+
+  // Canonical helper detecting whether an article is Published (Live) vs Draft
+  const isArticlePublished = (art: any): boolean => {
+    if (!art) return false;
+    if (art.isPublished === true || art.published === true || art.isLive === true || art.live === true) {
+      return true;
+    }
+    const candidates = [
+      art.wpStatus,
+      art.status,
+      art.post_status,
+      art.postStatus,
+      art.workflowStatus,
+      art.workflow_status,
+      art.state,
+    ];
+    for (const c of candidates) {
+      if (typeof c === 'string') {
+        const val = c.trim().toLowerCase();
+        if (val === 'publish' || val === 'published' || val === 'live' || val === 'public') {
+          return true;
+        }
+      }
+    }
+    if (art.publishedUrl || art.liveUrl || art.wpUrl) {
+      return true;
+    }
+    return false;
+  };
 
   useEffect(() => {
     settingsService
@@ -46,7 +82,140 @@ export const DashboardScreen: React.FC = () => {
   }, []);
 
   const activeSite = sites.find(s => s.id === activeSiteId) || sites[0] || null;
-  const recentArticles = articles.slice(0, 5);
+
+  // Load created/processed articles for active site (or all sites)
+  useEffect(() => {
+    let isMounted = true;
+    const fetchCreatedArticles = async () => {
+      setIsLoadingCreatedArticles(true);
+      try {
+        const extractList = (raw: any): any[] => {
+          if (!raw) return [];
+          if (Array.isArray(raw)) return raw;
+          if (typeof raw !== 'object') return [];
+          const d = raw.data;
+          if (Array.isArray(d)) return d;
+          if (d && typeof d === 'object') {
+            if (Array.isArray(d.data)) return d.data;
+            if (Array.isArray(d.articles)) return d.articles;
+            if (Array.isArray(d.items)) return d.items;
+            if (Array.isArray(d.records)) return d.records;
+            if (Array.isArray(d.results)) return d.results;
+          }
+          if (Array.isArray(raw.articles)) return raw.articles;
+          if (Array.isArray(raw.items)) return raw.items;
+          return [];
+        };
+
+        let list: any[] = [];
+        if (activeSite?.id) {
+          const res = await websitesService.getWebsiteArticles(activeSite.id, {
+            page: 1,
+            limit: 10,
+          });
+          list = extractList(res);
+
+          // Fallback if empty
+          if (list.length === 0) {
+            try {
+              const fallbackRes = await articlesService.getArticles({
+                websiteId: activeSite.id,
+                page: 1,
+                limit: 10,
+              });
+              const fallbackList = extractList(fallbackRes);
+              if (fallbackList.length > 0) list = fallbackList;
+            } catch {}
+          }
+        } else {
+          try {
+            const allRes = await articlesService.getArticles({ page: 1, limit: 10 });
+            list = extractList(allRes);
+          } catch {}
+        }
+
+        const normalizedList: ProcessedArticleDataDto[] = list.map((item: any, idx: number) => {
+          const published = isArticlePublished(item);
+          return {
+            id: String(item.id || item._id || `art-${idx + 1}`),
+            websiteId: item.websiteId || activeSite?.id || '',
+            contentTypeSlug:
+              item.contentTypeSlug || item.contentType?.slug || item.postType || 'post',
+            contentTypeName:
+              item.contentTypeName || item.contentType?.name || item.contentTypeSlug || 'Article',
+            title: typeof item.title === 'object' ? item.title.rendered : (item.title || 'Untitled Article'),
+            slug: item.slug || 'article',
+            focusKeyword: item.focusKeyword || item.targetKeyword || '',
+            metaDescription: item.metaDescription || item.excerpt || '',
+            contentHtml: item.contentHtml || '',
+            workflowStatus: published ? 'PUBLISHED' : (item.workflowStatus || 'READY_FOR_REVIEW'),
+            wpStatus: published ? 'publish' : 'draft',
+            featuredMediaUrl: item.featuredMediaUrl || item.featuredImage || null,
+            images: Array.isArray(item.images) ? item.images : [],
+            createdAt: item.createdAt || item.date || new Date().toISOString(),
+            updatedAt: item.updatedAt || item.modified || new Date().toISOString(),
+            publishedUrl: item.publishedUrl || item.wpUrl || item.link || null,
+          };
+        });
+
+        if (isMounted) {
+          setCreatedArticles(normalizedList);
+        }
+      } catch (err) {
+        if (isMounted) setCreatedArticles([]);
+      } finally {
+        if (isMounted) setIsLoadingCreatedArticles(false);
+      }
+    };
+
+    fetchCreatedArticles();
+    return () => {
+      isMounted = false;
+    };
+  }, [activeSite?.id]);
+
+  const recentArticles = createdArticles.slice(0, 5);
+
+  const handleToggleArticleStatus = async (art: ProcessedArticleDataDto) => {
+    const isPublished = isArticlePublished(art);
+    const nextStatus = isPublished ? 'draft' : 'publish';
+    setTogglingArticleId(art.id);
+    try {
+      if (art.websiteId) {
+        await websitesService.publishWebsiteArticle(art.websiteId, art.id, {
+          status: nextStatus,
+        });
+      }
+      setCreatedArticles(prev =>
+        prev.map(a =>
+          a.id === art.id
+            ? {
+                ...a,
+                wpStatus: nextStatus,
+                status: nextStatus,
+                workflowStatus: nextStatus === 'publish' ? 'PUBLISHED' : 'READY_FOR_REVIEW',
+                published: nextStatus === 'publish',
+                isPublished: nextStatus === 'publish',
+                isLive: nextStatus === 'publish',
+              }
+            : a
+        )
+      );
+      addToast({
+        title: nextStatus === 'publish' ? 'Article Published Live!' : 'Reverted to Draft',
+        message: `"${art.title}" is now ${nextStatus === 'publish' ? 'live on WordPress' : 'in draft'}.`,
+        type: 'success',
+      });
+    } catch (err: any) {
+      addToast({
+        title: 'Action Failed',
+        message: err.message || 'Could not update status.',
+        type: 'error',
+      });
+    } finally {
+      setTogglingArticleId(null);
+    }
+  };
 
   const getSiteName = (siteId: string) => {
     return sites.find(s => s.id === siteId)?.name || 'WordPress Site';
@@ -269,7 +438,7 @@ export const DashboardScreen: React.FC = () => {
                 onClick={() => setCurrentScreen('articles')}
                 className="text-xs text-violet-600 hover:text-violet-700 dark:text-violet-400 font-semibold flex items-center gap-1 cursor-pointer"
               >
-                <span>View all ({articles.length})</span>
+                <span>View all ({createdArticles.length})</span>
                 <ArrowRight className="w-3.5 h-3.5" />
               </button>
             </div>
@@ -279,7 +448,7 @@ export const DashboardScreen: React.FC = () => {
               <table className="w-full text-left text-xs text-slate-700 dark:text-zinc-300">
                 <thead className="bg-slate-50 dark:bg-zinc-950/60 text-slate-500 dark:text-zinc-400 uppercase font-mono text-[10px] tracking-wider border-b border-slate-200 dark:border-zinc-800">
                   <tr>
-                    <th className="py-3 px-4">Title</th>
+                    <th className="py-3 px-4">Article</th>
                     <th className="py-3 px-4">Website</th>
                     <th className="py-3 px-4">Type</th>
                     <th className="py-3 px-4">Status</th>
@@ -287,68 +456,126 @@ export const DashboardScreen: React.FC = () => {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100 dark:divide-zinc-800/60">
-                  {recentArticles.length === 0 ? (
+                  {isLoadingCreatedArticles ? (
                     <tr>
-                      <td colSpan={5} className="py-8 text-center text-xs text-slate-500">
-                        No articles generated yet. Click "Process New Article" to start.
+                      <td colSpan={5} className="py-12 text-center text-xs text-slate-400">
+                        <RefreshCw className="w-5 h-5 animate-spin mx-auto mb-2 text-violet-600" />
+                        <span>Loading created articles...</span>
+                      </td>
+                    </tr>
+                  ) : recentArticles.length === 0 ? (
+                    <tr>
+                      <td colSpan={5} className="py-10 text-center text-xs text-slate-500">
+                        <FileText className="w-8 h-8 mx-auto mb-2 text-slate-300 dark:text-zinc-700" />
+                        <p className="font-semibold text-slate-700 dark:text-zinc-300">No articles created yet</p>
+                        <p className="text-[11px] text-slate-400 mt-0.5">Click "Process New Article" to generate content.</p>
+                        <Button
+                          variant="glow"
+                          size="xs"
+                          onClick={navigateToNewArticle}
+                          icon={<Plus className="w-3.5 h-3.5" />}
+                          className="mt-3"
+                        >
+                          Process New Article
+                        </Button>
                       </td>
                     </tr>
                   ) : (
-                    recentArticles.map(art => (
-                      <tr
-                        key={art.id}
-                        className="hover:bg-slate-50/80 dark:hover:bg-zinc-800/30 transition-colors"
-                      >
-                        <td className="py-3.5 px-4 font-semibold text-slate-900 dark:text-zinc-200 max-w-[220px] truncate">
-                          {art.title}
-                        </td>
-                        <td className="py-3.5 px-4 font-medium text-slate-600 dark:text-zinc-400 max-w-[140px] truncate">
-                          {getSiteName(art.websiteId)}
-                        </td>
-                        <td className="py-3.5 px-4">
-                          <span className="capitalize font-mono text-[11px] px-2 py-0.5 rounded bg-slate-100 dark:bg-zinc-800 border border-slate-200 dark:border-zinc-700 text-slate-700 dark:text-zinc-300">
-                            {art.postType}
-                          </span>
-                        </td>
-                        <td className="py-3.5 px-4">
-                          <Badge status={art.status}>{art.status}</Badge>
-                        </td>
-                        <td className="py-3.5 px-4 text-right">
-                          <div className="flex items-center justify-end gap-1.5">
-                            {art.liveUrl && (
-                              <a
-                                href={art.liveUrl}
-                                target="_blank"
-                                rel="noreferrer"
-                                className="p-1.5 text-emerald-600 hover:text-emerald-700 dark:text-emerald-400 rounded-lg hover:bg-slate-100 dark:hover:bg-zinc-800"
-                                title="View Live Post"
-                              >
-                                <ExternalLink className="w-3.5 h-3.5" />
-                              </a>
-                            )}
-                            {art.status !== 'Published' && (
-                              <button
-                                onClick={() => publishArticleToWP(art.id)}
-                                className="p-1.5 text-violet-600 hover:text-violet-700 dark:text-violet-400 rounded-lg hover:bg-slate-100 dark:hover:bg-zinc-800 cursor-pointer"
-                                title="Publish to WordPress"
-                              >
-                                <Send className="w-3.5 h-3.5" />
-                              </button>
-                            )}
-                            <button
-                              onClick={() => {
-                                setSelectedArticleIdForEdit(art.id);
-                                setCurrentScreen('article-new');
-                              }}
-                              className="p-1.5 text-slate-500 hover:text-slate-800 dark:text-zinc-400 rounded-lg hover:bg-slate-100 dark:hover:bg-zinc-800 cursor-pointer"
-                              title="Edit Article"
+                    recentArticles.map(art => {
+                      const isPublished = isArticlePublished(art);
+                      const liveUrl = art.publishedUrl || art.wpUrl || art.link;
+
+                      return (
+                        <tr
+                          key={art.id}
+                          className="hover:bg-slate-50/80 dark:hover:bg-zinc-800/30 transition-colors"
+                        >
+                          <td className="py-3.5 px-4 font-semibold text-slate-900 dark:text-zinc-200 max-w-[260px]">
+                            <div className="flex items-center gap-3">
+                              {art.featuredMediaUrl ? (
+                                <img
+                                  src={art.featuredMediaUrl}
+                                  alt={art.title}
+                                  className="w-10 h-8 object-cover rounded-md shrink-0 border border-slate-200 dark:border-zinc-800"
+                                />
+                              ) : (
+                                <div className="w-10 h-8 rounded-md bg-slate-100 dark:bg-zinc-800 flex items-center justify-center shrink-0 text-slate-400">
+                                  <FileText className="w-3.5 h-3.5" />
+                                </div>
+                              )}
+                              <div className="min-w-0">
+                                <span className="block truncate text-xs font-semibold text-slate-900 dark:text-zinc-100">
+                                  {art.title}
+                                </span>
+                                <span className="text-[10px] font-mono text-slate-400 block truncate">
+                                  {art.slug}
+                                </span>
+                              </div>
+                            </div>
+                          </td>
+                          <td className="py-3.5 px-4 font-medium text-slate-600 dark:text-zinc-400 max-w-[140px] truncate">
+                            {getSiteName(art.websiteId)}
+                          </td>
+                          <td className="py-3.5 px-4">
+                            <span className="capitalize font-mono text-[11px] px-2 py-0.5 rounded bg-violet-50 dark:bg-violet-950/40 border border-violet-200 dark:border-violet-800/60 text-violet-700 dark:text-violet-300 font-semibold">
+                              {art.contentTypeName || art.contentTypeSlug || 'Article'}
+                            </span>
+                          </td>
+                          <td className="py-3.5 px-4">
+                            <span
+                              className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[11px] font-bold ${
+                                isPublished
+                                  ? 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800'
+                                  : 'bg-amber-50 dark:bg-amber-950/40 text-amber-600 dark:text-amber-400 border border-amber-200 dark:border-amber-800'
+                              }`}
                             >
-                              <Eye className="w-3.5 h-3.5" />
-                            </button>
-                          </div>
-                        </td>
-                      </tr>
-                    ))
+                              <span
+                                className={`w-1.5 h-1.5 rounded-full ${
+                                  isPublished ? 'bg-emerald-500 animate-pulse' : 'bg-amber-500'
+                                }`}
+                              />
+                              {isPublished ? 'Live' : 'Draft'}
+                            </span>
+                          </td>
+                          <td className="py-3.5 px-4 text-right">
+                            <div className="flex items-center justify-end gap-1.5">
+                              {liveUrl && (
+                                <a
+                                  href={liveUrl}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                  className="p-1.5 text-emerald-600 hover:text-emerald-700 dark:text-emerald-400 rounded-lg hover:bg-slate-100 dark:hover:bg-zinc-800"
+                                  title="View Live Post"
+                                >
+                                  <ExternalLink className="w-3.5 h-3.5" />
+                                </a>
+                              )}
+                              <button
+                                onClick={() => handleToggleArticleStatus(art)}
+                                disabled={togglingArticleId === art.id}
+                                className={`p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-zinc-800 cursor-pointer ${
+                                  isPublished ? 'text-amber-600 hover:text-amber-700' : 'text-violet-600 hover:text-violet-700'
+                                }`}
+                                title={isPublished ? 'Revert to Draft' : 'Publish to WordPress'}
+                              >
+                                {togglingArticleId === art.id ? (
+                                  <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                                ) : (
+                                  <Send className="w-3.5 h-3.5" />
+                                )}
+                              </button>
+                              <button
+                                onClick={() => navigateToEditArticle(art.id, art.websiteId)}
+                                className="p-1.5 text-slate-500 hover:text-slate-800 dark:text-zinc-400 rounded-lg hover:bg-slate-100 dark:hover:bg-zinc-800 cursor-pointer"
+                                title="Edit Article"
+                              >
+                                <Eye className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })
                   )}
                 </tbody>
               </table>
@@ -356,57 +583,74 @@ export const DashboardScreen: React.FC = () => {
 
             {/* Mobile Card List View */}
             <div className="sm:hidden divide-y divide-slate-100 dark:divide-zinc-800/60">
-              {recentArticles.length === 0 ? (
+              {isLoadingCreatedArticles ? (
+                <div className="p-6 text-center text-xs text-slate-400">
+                  <RefreshCw className="w-5 h-5 animate-spin mx-auto mb-2 text-violet-600" />
+                  <span>Loading created articles...</span>
+                </div>
+              ) : recentArticles.length === 0 ? (
                 <div className="p-6 text-center text-xs text-slate-500">
-                  No articles generated yet.
+                  No articles created yet.
                 </div>
               ) : (
-                recentArticles.map(art => (
-                  <div key={art.id} className="p-4 space-y-2">
-                    <div className="flex items-start justify-between gap-2">
-                      <span className="font-semibold text-xs text-slate-900 dark:text-zinc-100 line-clamp-2">
-                        {art.title}
-                      </span>
-                      <Badge status={art.status}>{art.status}</Badge>
-                    </div>
+                recentArticles.map(art => {
+                  const isPublished = isArticlePublished(art);
+                  const liveUrl = art.publishedUrl || art.wpUrl || art.link;
 
-                    <div className="flex items-center justify-between text-[11px] text-slate-500 dark:text-zinc-400 pt-1">
-                      <span>{getSiteName(art.websiteId)}</span>
-                      <span className="font-mono">{art.postType}</span>
-                    </div>
-
-                    <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100 dark:border-zinc-800/40">
-                      {art.liveUrl && (
-                        <a
-                          href={art.liveUrl}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="px-2 py-1 text-emerald-600 dark:text-emerald-400 text-xs font-semibold flex items-center gap-1 rounded hover:bg-slate-100 dark:hover:bg-zinc-800"
+                  return (
+                    <div key={art.id} className="p-4 space-y-2">
+                      <div className="flex items-start justify-between gap-2">
+                        <span className="font-semibold text-xs text-slate-900 dark:text-zinc-100 line-clamp-2">
+                          {art.title}
+                        </span>
+                        <span
+                          className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold shrink-0 ${
+                            isPublished
+                              ? 'bg-emerald-50 text-emerald-600 dark:bg-emerald-950/40 dark:text-emerald-400'
+                              : 'bg-amber-50 text-amber-600 dark:bg-amber-950/40 dark:text-amber-400'
+                          }`}
                         >
-                          <ExternalLink className="w-3 h-3" />
-                          <span>Live</span>
-                        </a>
-                      )}
-                      <button
-                        onClick={() => {
-                          setSelectedArticleIdForEdit(art.id);
-                          setCurrentScreen('article-new');
-                        }}
-                        className="px-2 py-1 text-slate-600 dark:text-zinc-300 text-xs font-semibold flex items-center gap-1 rounded hover:bg-slate-100 dark:hover:bg-zinc-800 cursor-pointer"
-                      >
-                        <Eye className="w-3 h-3" />
-                        <span>View</span>
-                      </button>
+                          {isPublished ? 'Live' : 'Draft'}
+                        </span>
+                      </div>
+
+                      <div className="flex items-center justify-between text-[11px] text-slate-500 dark:text-zinc-400 pt-1">
+                        <span>{getSiteName(art.websiteId)}</span>
+                        <span className="font-mono text-[10px] text-violet-600 dark:text-violet-400 font-semibold">
+                          {art.contentTypeName || art.contentTypeSlug || 'Article'}
+                        </span>
+                      </div>
+
+                      <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100 dark:border-zinc-800/40">
+                        {liveUrl && (
+                          <a
+                            href={liveUrl}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="px-2 py-1 text-emerald-600 dark:text-emerald-400 text-xs font-semibold flex items-center gap-1 rounded hover:bg-slate-100 dark:hover:bg-zinc-800"
+                          >
+                            <ExternalLink className="w-3 h-3" />
+                            <span>Live</span>
+                          </a>
+                        )}
+                        <button
+                          onClick={() => navigateToEditArticle(art.id, art.websiteId)}
+                          className="px-2 py-1 text-slate-600 dark:text-zinc-300 text-xs font-semibold flex items-center gap-1 rounded hover:bg-slate-100 dark:hover:bg-zinc-800 cursor-pointer"
+                        >
+                          <Eye className="w-3 h-3" />
+                          <span>Edit</span>
+                        </button>
+                      </div>
                     </div>
-                  </div>
-                ))
+                  );
+                })
               )}
             </div>
           </div>
 
           <div className="p-3 bg-slate-50/50 dark:bg-zinc-950/40 border-t border-slate-200 dark:border-zinc-800 flex items-center justify-between">
             <span className="text-[11px] text-slate-500 dark:text-zinc-400 font-mono">
-              Showing {recentArticles.length} of {articles.length} records
+              Showing {recentArticles.length} of {createdArticles.length} created articles
             </span>
             <button
               onClick={() => setCurrentScreen('articles')}
